@@ -13,7 +13,9 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { trackingEvent } from '@/packages/event'
 import { buildChatboxUrl } from '@/packages/remote'
 import platform from '@/platform'
+import { ANONYMOUS_WORKSPACE } from '@shared/workspace-namespace'
 import { isChatboxAIPlanFree } from '@/stores/licensePlan'
+import { enterWorkspace, getActiveWorkspaceNamespace } from '@/stores/workspaceIdentity'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { LicenseDetailCard } from './LicenseDetailCard'
 import { useLicenseActivation } from './useLicenseActivation'
@@ -53,6 +55,9 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
   const handleDeactivate = async () => {
     setIsDeactivating(true)
     await deactivate()
+    if (getActiveWorkspaceNamespace() !== ANONYMOUS_WORKSPACE) {
+      await enterWorkspace(ANONYMOUS_WORKSPACE)
+    }
     trackingEvent('click_deactivate_license_button', { event_category: 'user' })
     setIsDeactivating(false)
   }

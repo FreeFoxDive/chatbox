@@ -26,7 +26,9 @@ import {
   type UserLicense,
 } from '@/packages/remote'
 import platform from '@/platform'
+import { officialWorkspaceNamespace } from '@shared/workspace-namespace'
 import { isChatboxAIPlanFree } from '@/stores/licensePlan'
+import { enterWorkspace, getActiveWorkspaceNamespace } from '@/stores/workspaceIdentity'
 import * as premiumActions from '@/stores/premiumActions'
 import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
 import { LicenseDetailCard } from './LicenseDetailCard'
@@ -98,7 +100,11 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(
       initialData: initialAccountData?.userProfile,
     })
 
-    const { data: licenses = [], error: licensesError } = useQuery({
+    const {
+      data: licenses = [],
+      error: licensesError,
+      isFetched: licensesFetched,
+    } = useQuery({
       queryKey: ['userLicenses'],
       queryFn: initialAccountData ? () => Promise.resolve(initialAccountData.licenses) : listLicensesByUser,
       staleTime: 0, // 数据立即过期，总是刷新
@@ -179,7 +185,17 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(
     const activatingLicenseRef = useRef(false)
 
     useEffect(() => {
-      if (!userProfile || licenses.length === 0 || activatingLicenseRef.current) return
+      const licensesReady = Boolean(initialAccountData) || licensesFetched
+      if (!userProfile || !licensesReady || activatingLicenseRef.current) return
+      if (licenses.length === 0) {
+        void (async () => {
+          const namespace = await officialWorkspaceNamespace(userProfile.email)
+          if (namespace !== getActiveWorkspaceNamespace()) {
+            await enterWorkspace(namespace, { licenseActivationMethod: 'login' })
+          }
+        })()
+        return
+      }
       const selection = selectAccountLicense(
         licenses.map(accountLicenseFromApi),
         settingsStore.getState(),
@@ -198,6 +214,12 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(
         return
       }
       if (usableLicenses.length === 0) {
+        void (async () => {
+          const namespace = await officialWorkspaceNamespace(userProfile.email)
+          if (namespace !== getActiveWorkspaceNamespace()) {
+            await enterWorkspace(namespace, { licenseActivationMethod: 'login' })
+          }
+        })()
         const accountLicense = selectAccountLicenseForInspection(licenses.map(accountLicenseFromApi), [
           selectedLicenseKey,
           licenseKey,
@@ -248,6 +270,8 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(
       }
     }, [
       afterLogin,
+      licensesFetched,
+      initialAccountData,
       onLoginSelectionHandled,
       userProfile,
       licenses,

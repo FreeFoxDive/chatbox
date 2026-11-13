@@ -11,11 +11,11 @@ import { Box, Grid } from '@mui/material'
 import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { shouldNavigateToStartPage, shouldSkipOnboardingGuide, splitLaunchPath } from '@shared/dev-launch'
-import { type RemoteConfig, Theme } from '@shared/types'
+import { activeStorageKey } from '@shared/workspace-namespace'
+import { Theme } from '@shared/types'
 import { useQuery } from '@tanstack/react-query'
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 import clsx from 'clsx'
-import { useSetAtom } from 'jotai'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { currentBlobStorage } from '@/adapters/CurrentBlobStorage'
@@ -42,18 +42,13 @@ import DbSchemaGuardDialog from '@/components/DbSchemaGuardDialog'
 import { BackupTaskOverlay } from '@/components/settings/BackupTaskOverlay'
 import SettingsModal from '@/modals/Settings'
 import { navigateToSettings } from '@/modals/settings-navigation'
-import { prefetchModelRegistry } from '@/packages/model-registry'
 import { getOS } from '@/packages/navigator'
-import * as remote from '@/packages/remote'
 import { sessionStartupRecovery, useSessionStartupLoadTarget } from '@/packages/session-startup-recovery'
-import ClientNotificationWindow from '@/pages/ClientNotificationWindow'
 import PictureDialog from '@/pages/PictureDialog'
-import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
 import platform from '@/platform'
 import { getSettingsSearchParam, navigateToDynamicPath, router } from '@/router'
 import Sidebar from '@/Sidebar'
-import * as atoms from '@/stores/atoms'
 import { getRendererDevLaunchOptions } from '@/utils/dev-launch'
 
 const useSessionHeader = (sessionId: string | null) => rendererApplication.sessionHooks.useSessionHeader(sessionId)
@@ -160,10 +155,6 @@ function Root() {
   const pageViewVisitGate = useRef(createPageViewVisitGate())
   const initialized = useRef(false)
 
-  const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
-
-  const setRemoteConfig = useSetAtom(atoms.remoteConfigAtom)
-
   useEffect(() => {
     if (initialized.current) {
       return
@@ -171,16 +162,6 @@ function Root() {
     ;(async () => {
       // Wait for stores to hydrate from persistent storage
       await Promise.all([initSettingsStore(), initOnboardingStore()])
-      void prefetchModelRegistry()
-
-      const syncRemoteConfig = async () => {
-        const remoteConfig = await remote
-          .getRemoteConfig('setting_chatboxai_first')
-          .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
-        setRemoteConfig(async (prev) => ({ ...(await prev), ...remoteConfig }))
-        return remoteConfig
-      }
-
       const launchOptions = getRendererDevLaunchOptions()
       const skipOnboarding = shouldSkipOnboardingGuide(launchOptions)
       if (skipOnboarding) {
@@ -201,11 +182,8 @@ function Root() {
             search: Object.keys(search).length > 0 ? search : undefined,
           })
         }
-        void syncRemoteConfig()
         return
       }
-
-      const remoteConfig = await syncRemoteConfig()
 
       // Skip guide-related checks if already on guide, dev tools, or settings/mcp page
       if (
@@ -235,21 +213,11 @@ function Root() {
       const onboardingCompleted = onboardingStore.getState().completed
       const needsSetup = settingActions.needEditSetting()
 
-      // Auto-navigate to guide for new users who need setup
       if (!isExceeded && !onboardingCompleted && needsSetup) {
-        router.navigate({ to: '/guide', replace: true })
-        return
-      }
-
-      // 是否需要弹出关于窗口（更新后首次启动）
-      // 目前仅在桌面版本更新后首次启动、且网络环境为"外网"的情况下才自动弹窗
-      const shouldShowAboutDialogWhenStartUp = await platform.shouldShowAboutDialogWhenStartUp()
-      if (shouldShowAboutDialogWhenStartUp && remoteConfig.setting_chatboxai_first) {
-        setOpenAboutDialog(true)
-        return
+        onboardingStore.getState().markCompleted()
       }
     })()
-  }, [setOpenAboutDialog, setRemoteConfig, location.pathname, location.search, isExceeded, isExceededResolved])
+  }, [location.pathname, location.search, isExceeded, isExceededResolved])
 
   const showSidebar = useUIStore((s) => s.showSidebar)
   const sidebarWidth = useSidebarWidth()
@@ -276,7 +244,7 @@ function Root() {
     const { startupPage } = settingsStore.getState()
     let sid = ''
     try {
-      sid = JSON.parse(localStorage.getItem('_currentSessionIdCachedAtom') || '""') as string
+      sid = JSON.parse(localStorage.getItem(activeStorageKey('_currentSessionIdCachedAtom')) || '""') as string
     } catch {
       sid = ''
     }
@@ -425,10 +393,6 @@ function Root() {
       {/* <OpenAttachLinkDialog /> */}
       {/* 图片预览 */}
       <PictureDialog />
-      {/* 似乎是从后端拉一个弹窗的配置 */}
-      <RemoteDialogWindow />
-      {/* 一次性客户端通知，与现有远程弹窗和更新提示保持独立 */}
-      <ClientNotificationWindow />
       {/* IndexedDB schema 与当前版本不匹配时的升级/刷新引导 */}
       <DbSchemaGuardDialog />
       <BackupTaskOverlay />

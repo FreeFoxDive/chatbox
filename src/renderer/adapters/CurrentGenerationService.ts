@@ -21,7 +21,6 @@ import { rendererApplication } from '@/app/renderer-application'
 import { languageNameMap } from '@/i18n/locales'
 import { getLogger } from '@/lib/utils'
 import { captureAgentModeException } from '@/observability/agent-mode'
-import * as appleAppStore from '@/packages/apple_app_store'
 import { wakeBackgroundTaskFollowUps } from '@/packages/chatbox-cli/background-follow-up'
 import { resolveCompactionBudget } from '@/packages/context-management/compaction-detector'
 import { getConfiguredContextWindow, getEffectiveMaxOutputTokens } from '@/packages/context-management/context-pressure'
@@ -155,9 +154,6 @@ async function buildToolsForPausedToolCall(
     sandboxProvider.setExtraWritableDirs(userWorkingDirectories)
   }
   let canExecuteCode = Boolean(sandboxProvider && model.isSupportToolUse('agent'))
-  if (canExecuteCode && sandboxProvider?.type === 'cloud' && !settingActions.isPro()) {
-    canExecuteCode = false
-  }
   if (canExecuteCode && sandboxProvider) {
     const availability = await sandboxProvider.checkAvailability()
     if (!availability.available) {
@@ -360,7 +356,6 @@ const dependencies: GenerationServiceDependencies<ModelDependencies> = {
     createPictureStorageKey: (sessionId, messageId) => StorageKeyGenerator.picture(`${sessionId}:${messageId}`),
     markFirstSuccessfulChatCompleted: () => markFirstSuccessfulChatCompleted(),
     afterMessageGenerated: (sessionId, message) => {
-      appleAppStore.tickAfterMessageGenerated()
       markSessionReplyCompleted(sessionId, message)
     },
     afterMessageFailed: (sessionId, message) => markSessionReplyFailed(sessionId, message),

@@ -60,7 +60,6 @@ import {
   type IconProps,
   IconTextWrap,
   IconTextWrapDisabled,
-  IconWorldUpload,
 } from '@tabler/icons-react'
 import clsx from 'clsx'
 import { visit } from 'unist-util-visit'
@@ -722,7 +721,6 @@ const BlockCode = memo(
     generating,
     forceColorScheme,
     onCodeCopy,
-    onPreviewWebpage,
   }: BlockCodeProps) => {
     const { t } = useTranslation()
     const fallbackId = useId()
@@ -731,10 +729,6 @@ const BlockCode = memo(
     const shikiTheme: ShikiTheme = colorScheme !== 'light' ? 'one-dark-pro' : 'one-light'
     const languageName = useMemo(() => language.toUpperCase(), [language])
     const isRenderableCode = useMemo(() => isRenderableCodeLanguage(language), [language])
-    const canDeploy = useMemo(
-      () => isRenderableCode && String(children).trim().length > 0,
-      [children, isRenderableCode]
-    )
 
     const icon = useMemo(() => CodeIcons[languageName] || IconCode, [languageName])
 
@@ -759,20 +753,6 @@ const BlockCode = memo(
         }).catch(() => null)
       },
       [children, uniqueId, sessionId]
-    )
-
-    const onClickDeploy = useCallback(
-      (event: React.MouseEvent) => {
-        event.stopPropagation()
-        event.preventDefault()
-        if (!canDeploy) {
-          return
-        }
-        // 应投放侧要求改触发点为分享按钮。但注意现在语义上是 mismatch 的
-        onPreviewWebpage?.()
-        NiceModal.show('vibedrop-publish', { html: String(children), uniqueId, sessionId }).catch(() => null)
-      },
-      [canDeploy, children, uniqueId, sessionId, onPreviewWebpage]
     )
 
     const needCollapse = useMemo(
@@ -850,14 +830,6 @@ const BlockCode = memo(
                 <Tooltip label={t('Preview')} withArrow openDelay={1000}>
                   <ActionIcon variant="transparent" color="chatbox-tertiary" size={18} onClick={onClickArtifact}>
                     <IconPlayerPlayFilled size={14} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
-
-              {canDeploy && (
-                <Tooltip label={t('Publish Webpage')} withArrow openDelay={1000}>
-                  <ActionIcon variant="transparent" color="chatbox-tertiary" size={18} onClick={onClickDeploy}>
-                    <IconWorldUpload size={14} />
                   </ActionIcon>
                 </Tooltip>
               )}

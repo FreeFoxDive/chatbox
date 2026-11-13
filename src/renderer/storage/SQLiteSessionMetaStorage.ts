@@ -10,6 +10,7 @@ import {
   capacitorSessionListOrderBy,
 } from '@chatbox/core'
 import type { SessionMetaPage, SessionMetaRecord } from '@shared/types'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import { type SessionMetaStorage, sortSessionRecords } from './SessionMetaStorage'
 
 const DB_NAME = 'chatbox-session-meta'
@@ -59,12 +60,12 @@ export class SQLiteSessionMetaStorage implements SessionMetaStorage {
 
   private async openDatabase(): Promise<void> {
     try {
-      this.sqlite.closeConnection(DB_NAME, false)
+      this.sqlite.closeConnection(activeDatabaseName(DB_NAME), false)
     } catch {
       // ignore - connection may not exist
     }
 
-    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false)
+    this.database = await this.sqlite.createConnection(activeDatabaseName(DB_NAME), false, 'no-encryption', 1, false)
     await this.database.open()
 
     await this.database.execute(CAPACITOR_SESSION_META_SCHEMA_SQL)

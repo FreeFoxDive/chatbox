@@ -20,7 +20,6 @@ export function compatibleImageApiHeaders(apiHost: string): Record<string, strin
   }
   if (apiHost.includes('aihubmix.com')) {
     return {
-      'APP-Code': 'VAFU9221',
     }
   }
   return undefined

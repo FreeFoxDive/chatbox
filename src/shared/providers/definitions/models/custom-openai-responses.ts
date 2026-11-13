@@ -75,7 +75,6 @@ export default class CustomOpenAIResponses extends AbstractAISDKModel {
           }
         : this.options.apiHost.includes('aihubmix.com')
           ? {
-              'APP-Code': 'VAFU9221',
             }
           : undefined,
     })

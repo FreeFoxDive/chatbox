@@ -1,5 +1,6 @@
 import type { SettingsStoragePort } from '@chatbox/core/ports'
 import platform from '@/platform'
+import { settingsWritesFrozenNow } from '@/stores/workspaceIdentity'
 import storage from '@/storage'
 
 export const SETTINGS_STORAGE_KEY = 'settings'
@@ -16,6 +17,7 @@ export class RendererSettingsStorage implements SettingsStoragePort {
   }
 
   write(value: unknown): Promise<void> {
+    if (settingsWritesFrozenNow()) return Promise.resolve()
     return storage.setItem(SETTINGS_STORAGE_KEY, value)
   }
 

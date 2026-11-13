@@ -113,12 +113,15 @@ describe('Chatbox AI entitlement refresh', () => {
     expect(result.current.locked).toBe(true)
   })
 
-  it('refreshes on app focus even while the model cache is fresh', async () => {
+  it('does not refresh the model catalog when the window regains focus', async () => {
     const { result } = mount(null)
     await waitFor(() => expect(result.current.chatboxAIModelList?.license.plan).toBe('free'))
+    const requests = mocks.getChatboxAIModelList.mock.calls.length
     serverPlan = 'pro'
     act(() => client.getQueryCache().onFocus())
-    await waitFor(() => expect(result.current.locked).toBe(false))
+    await act(async () => {})
+    expect(mocks.getChatboxAIModelList).toHaveBeenCalledTimes(requests)
+    expect(result.current.locked).toBe(true)
   })
 
   it('rechecks access when the license becomes disabled without changing its plan', async () => {
@@ -194,10 +197,21 @@ describe('Chatbox AI entitlement refresh', () => {
     expect(result.current.chatboxAIModelList?.license.plan).toBe('pro')
   })
 
-  it('keeps server access authoritative when a detail refresh triggers a failed catalog request', async () => {
+  it('keeps the model list when only the manifest request fails', async () => {
     const { result, rerender } = mount()
     await waitFor(() => expect(result.current.chatboxAIModelList?.license.plan).toBe('free'))
     mocks.getModelManifest.mockRejectedValueOnce(new Error('offline'))
+    serverPlan = 'pro'
+    rerender({ detail: proDetail, licenseKey: 'active-key' })
+    await waitFor(() => expect(result.current.chatboxAIModelList?.license.plan).toBe('pro'))
+    expect(result.current.isError).toBe(false)
+  })
+
+  it('keeps the previous catalog when both catalog requests fail', async () => {
+    const { result, rerender } = mount()
+    await waitFor(() => expect(result.current.chatboxAIModelList?.license.plan).toBe('free'))
+    mocks.getModelManifest.mockRejectedValueOnce(new Error('offline'))
+    mocks.getChatboxAIModelList.mockRejectedValueOnce(new Error('offline'))
     rerender({ detail: proDetail, licenseKey: 'active-key' })
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(result.current.locked).toBe(true)

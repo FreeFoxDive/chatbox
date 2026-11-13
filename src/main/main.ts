@@ -46,12 +46,10 @@ import type { ShortcutSetting } from 'src/shared/types'
 import { applyDevLaunchHashToUrl, buildDevLaunchHash, parseDevLaunchOptions } from '../shared/dev-launch'
 import type { FileEditRequest } from '../shared/file-edits'
 import { KNOWN_LOCAL_PARSER_ERROR_CODES } from '../shared/file-parse-errors'
-import { startChatboxAPIOriginProbing } from '../shared/request/chatboxai_pool'
 import { VIEW_IMAGE_MAX_READ_BYTES } from '../shared/tools/view-image'
 import { flushSentry, sentry } from './adapters/sentry'
 import { registerAgentPersonaHandlers } from './agent-persona/ipc-handlers'
 import * as analystic from './analystic-node'
-import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
 import { formatTooLargeFileRead, readRegularFileBytesBounded } from './bounded-file-read'
 import { registerBuiltInBrowserHandlers } from './built-in-browser'
@@ -61,7 +59,6 @@ import { editTextFile, writeTextFile } from './file-mutations'
 import { parseFile } from './file-parser'
 import { isQuitForInstallRequested } from './installer-command'
 import Locale from './locales'
-import { mainFetch } from './main-fetch'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
 import MenuBuilder from './menu'
 import { registerOAuthHandlers } from './oauth'
@@ -78,9 +75,11 @@ import {
   getSettings,
   getStoreBlob,
   listStoreBlobKeys,
+  scopeStoreKey,
   setStoreBlob,
   store,
 } from './store-node'
+import { writePersistedWorkspaceNamespace } from './workspace-namespace-file'
 import * as windowState from './window_state'
 import { loadWorkspaceInstructions } from './workspace-instructions'
 
@@ -756,17 +755,12 @@ if (quitForInstallRequested) {
   app
     .whenReady()
     .then(async () => {
-      // Main is a separate JS context from the renderer, so it selects its own Chatbox API origin.
-      startChatboxAPIOriginProbing({ fetch: mainFetch })
       await knowledgeBaseInitPromise
       await createWindow()
       startupWindowCreated = true
       await initializeSessionAttachmentRagAfterAppReady()
       ensureTray()
-      // HarmonyOS HAP updates are distributed outside electron-updater.
-      if (MAIN_RUNTIME_POLICY.startAppUpdater) {
-        new AppUpdater(() => mainWindow)
-      }
+      // Automatic update checks are disabled on this build.
 
       // 处理启动时的 Deep Link：macOS 来自窗口创建前的 open-url 事件，Windows/Linux 来自命令行参数
       const url =
@@ -874,15 +868,18 @@ app.on('open-url', async (_event, url) => {
 registerFileTransferIpc()
 
 ipcMain.handle('getStoreValue', (event, key) => {
-  return store.get(key)
+  return store.get(scopeStoreKey(key))
 })
 ipcMain.handle('setStoreValue', (event, key, dataJson) => {
   // 仅在传输层用 JSON 序列化，存储层用原生数据，避免存储层 JSON 损坏后无法自动处理的情况
   const data = JSON.parse(dataJson)
-  return store.set(key, data)
+  return (store.set as (key: string, value: unknown) => void)(scopeStoreKey(key), data)
 })
 ipcMain.handle('delStoreValue', (event, key) => {
-  return store.delete(key)
+  return (store.delete as (key: string) => void)(scopeStoreKey(key))
+})
+ipcMain.handle('setActiveWorkspaceNamespace', (_event, namespace: string) => {
+  return writePersistedWorkspaceNamespace(namespace)
 })
 ipcMain.handle('getAllStoreValues', (event) => {
   return JSON.stringify(store.store)
@@ -921,6 +918,7 @@ ipcMain.handle('getHostname', () => {
   return os.hostname()
 })
 ipcMain.handle('getDeviceName', () => {
+  return 'Chatbox Client'
   if (process.platform === 'darwin') {
     try {
       const { execSync } = require('child_process')

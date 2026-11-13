@@ -111,9 +111,5 @@ async function initializeGoogleAnalyticsTracking(): Promise<void> {
 }
 
 export function initGoogleAnalyticsTracking(): Promise<void> {
-  initializationPromise ??= initializeGoogleAnalyticsTracking().catch((e) => {
-    disableGoogleAnalytics()
-    console.error('Failed to initialize Google Analytics tracking:', e)
-  })
-  return initializationPromise
+  return Promise.resolve()
 }

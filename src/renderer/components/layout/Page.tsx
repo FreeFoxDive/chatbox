@@ -8,7 +8,6 @@ import { useUIStore } from '@/stores/uiStore'
 import Divider from '../common/Divider'
 import { ICON_SIZE, IconButton } from '../common/IconButton'
 import { TitleBarContent } from './AppTitleBar'
-import { MobileWebDownloadBanner } from './DesktopDownloadReminder'
 import WindowControls from './WindowControls'
 
 export type PageHeaderProps = {
@@ -90,7 +89,6 @@ export const PageHeader: FC<PageHeaderProps> = ({ title, left, right }) => {
         <WindowControls className="-mr-3 ml-2" />
       </Flex>
       <Divider className="chatbox-title-bar-divider" />
-      <MobileWebDownloadBanner />
     </>
   )
 }

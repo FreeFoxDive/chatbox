@@ -205,6 +205,18 @@ tmp_*.*
 
 /src/shared/mobile-work/generated/
 
+# Android / Capacitor build output and signing material
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/local.properties
+android/.signing/
+*.jks
+*.keystore
+
 # Local headless evaluation artifacts
 /jobs/
 /scripts/terminal_bench/__pycache__/

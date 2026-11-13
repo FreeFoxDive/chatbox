@@ -4,7 +4,6 @@ import { useAtomValue } from 'jotai'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { remoteConfigAtom } from '@/stores/atoms'
 import { CHATBOX_BUILD_CHANNEL, CHATBOX_BUILD_PLATFORM } from '@/variables'
-import * as remote from '../packages/remote'
 import platform from '../platform'
 
 function getInitialTime() {
@@ -51,13 +50,9 @@ export default function useVersion() {
       const settings = await platform.getSettings()
       const version = await platform.getVersion()
       _setVersion(version)
-      try {
-        const os = await platform.getPlatform()
-        const needUpdate = await remote.checkNeedUpdate(version, os, config, settings)
-        setNeedCheckUpdate(needUpdate)
-      } catch (e) {
-        console.error('Failed to check for updates:', e)
-      }
+      void config
+      void settings
+      setNeedCheckUpdate(false)
     }
     handler()
     updateCheckTimer.current = setInterval(handler, 2 * 60 * 60 * 1000)

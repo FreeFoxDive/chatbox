@@ -1,4 +1,5 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
 import { StorageKey } from '@/storage'
@@ -156,11 +157,17 @@ class SQLiteStorage {
     try {
       // A WebView reload can leave a native connection from the previous JS context.
       try {
-        await this.sqlite.closeConnection('chatbox.db', false)
+        await this.sqlite.closeConnection(activeDatabaseName('chatbox.db'), false)
       } catch {
         // A fresh launch has no previous connection.
       }
-      this.database = await this.sqlite.createConnection('chatbox.db', false, 'no-encryption', 1, false)
+      this.database = await this.sqlite.createConnection(
+        activeDatabaseName('chatbox.db'),
+        false,
+        'no-encryption',
+        1,
+        false
+      )
 
       await this.database.open()
       await this.initializeSchema()
@@ -717,7 +724,7 @@ export class MobileSQLiteStorage implements Storage {
 }
 
 export class IndexedDBStorage implements Storage {
-  private store = localforage.createInstance({ name: 'chatboxstore' })
+  private store = localforage.createInstance({ name: activeDatabaseName('chatboxstore') })
 
   public getStorageType(): string {
     return 'INDEXEDDB'

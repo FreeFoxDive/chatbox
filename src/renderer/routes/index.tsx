@@ -216,7 +216,7 @@ function Index() {
   ])
 
   const { copilots: myCopilots } = useMyCopilots()
-  const { copilots: remoteCopilots } = useRemoteCopilotsByCursor({ limit: 10 })
+  const { copilots: remoteCopilots } = useRemoteCopilotsByCursor({ limit: 10, enabled: false })
   const [routeCopilot, setRouteCopilot] = useState<CopilotDetail | null>(null)
   const selectedCopilotId = useMemo(() => session?.copilotId, [session?.copilotId])
   const selectedCopilot = useMemo(
@@ -531,7 +531,7 @@ const CopilotPicker = ({ selectedId, onSelect }: { selectedId?: string; onSelect
   const isSmallScreen = useIsSmallScreen()
   const widthFull = useUIStore((s) => s.widthFull)
   const { copilots: myCopilots } = useMyCopilots()
-  const { copilots: remoteCopilots } = useRemoteCopilotsByCursor()
+  const { copilots: remoteCopilots } = useRemoteCopilotsByCursor({ enabled: false })
 
   const copilots = useMemo(
     () =>

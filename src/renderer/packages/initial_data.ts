@@ -59,7 +59,7 @@ export const defaultSessionsForEN: Session[] = [
     id: 'e22ab364-4681-4e24-aaba-461ed0fccfd3',
     name: 'Travel Guide (Example)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/travel.png',
+    picUrl: '',
     messages: [
       {
         id: 'a639e972-10b7-4a67-8f3d-bf46e1e94c68',
@@ -88,7 +88,7 @@ export const defaultSessionsForEN: Session[] = [
     id: '55d92e88-02af-4c3b-a378-aa0a1970abb1',
     name: 'Social Media Influencer (Example)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/twitter.png',
+    picUrl: '',
     messages: [
       {
         id: 'f8f341f4-9a13-448d-becd-b8d07c31f8dd',
@@ -117,7 +117,7 @@ export const defaultSessionsForEN: Session[] = [
     id: '35df5a96-b612-406a-985b-3ab4d2c481ff',
     name: 'Software Developer (Example)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/programmer.png',
+    picUrl: '',
     messages: [
       {
         id: 'a700be6c-cbdd-43a3-b572-49e7a921c059',
@@ -146,7 +146,7 @@ export const defaultSessionsForEN: Session[] = [
     id: '776eac23-7b4a-40da-91cd-f233bb4742ed',
     name: 'Translator (Example)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/translator.jpeg',
+    picUrl: '',
     messages: [
       {
         id: '4f609d56-5e6a-40b7-8e32-7b3ba8a9a990',
@@ -213,7 +213,7 @@ export const defaultSessionsForCN: Session[] = [
     id: '81cfc426-48b4-4a13-ad42-bfcfc4544299',
     name: '小红书文案生成器 (示例)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/xhs.webp',
+    picUrl: '',
     messages: [
       {
         id: '7a0de212-2790-49dd-a47a-b1cf67cfb581',
@@ -241,7 +241,7 @@ export const defaultSessionsForCN: Session[] = [
     id: '8732ec08-b23c-4b5e-8f65-d63d808f970f',
     name: '夸夸机 (示例)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/9fa8f1eb09e717d110d614d7474cbc591381206547520499117.gif',
+    picUrl: '',
     messages: [
       {
         id: '2045db61-b350-43b1-b3f2-442d68d379aa',
@@ -270,7 +270,7 @@ export const defaultSessionsForCN: Session[] = [
     id: '3e091ac6-ebfa-42c9-b125-c67ac2d45ee1',
     name: '翻译助手 (示例)',
     type: 'chat',
-    picUrl: 'https://static.chatboxai.app/copilot-avatar/translator.jpeg',
+    picUrl: '',
     messages: [
       {
         id: 'ed9b9e74-1715-446e-b3c1-bed565c4878c',

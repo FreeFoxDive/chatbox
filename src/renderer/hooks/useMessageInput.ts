@@ -1,3 +1,4 @@
+import { activeStorageKey } from '@shared/workspace-namespace'
 import { useAtomValue } from 'jotai'
 import { debounce } from 'lodash'
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,7 +17,8 @@ export function useMessageInput(initialMessage = '', _options: Partial<Options> 
   const draftRef = useRef<string>(initialMessage)
 
   const draftStorageKey = useMemo(() => {
-    return options.isNewSession ? 'new-chat' : `draft-${currentSessionId}`
+    const key = options.isNewSession ? 'new-chat' : `draft-${currentSessionId}`
+    return activeStorageKey(key)
   }, [currentSessionId, options.isNewSession])
 
   const restoreDraft = useCallback(() => {

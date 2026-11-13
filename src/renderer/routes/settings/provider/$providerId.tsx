@@ -31,7 +31,6 @@ import {
 } from '@shared/utils'
 import {
   IconCircleCheck,
-  IconDiscount2,
   IconExternalLink,
   IconHelpCircle,
   IconLogin,
@@ -797,14 +796,6 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                       autoCorrect="off"
                       spellCheck={false}
                     />
-                    {providerSettings?.apiHost?.includes('aihubmix.com') && (
-                      <Flex align="center" gap={4}>
-                        <ScalableIcon icon={IconDiscount2} size={14} color="var(--chatbox-tint-tertiary)" />
-                        <Text span fz={12} c="chatbox-tertiary">
-                          {t('AIHubMix integration in Chatbox offers 10% discount')}
-                        </Text>
-                      </Flex>
-                    )}
                   </Stack>
                 )}
               />

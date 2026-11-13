@@ -24,13 +24,10 @@ describe('trackEvent', () => {
     })
   })
 
-  it('does not include a session ID in the event URL', () => {
+  it('does not send events even when reporting is enabled', () => {
     trackEvent('generate', { provider: 'openai' })
 
-    expect(plausible).toHaveBeenCalledWith('generate', {
-      props: { provider: 'openai' },
-      u: 'https://app.chatboxai.app/#/session/:sessionId',
-    })
+    expect(plausible).not.toHaveBeenCalled()
   })
 
   it('does not track when reporting is disabled', () => {

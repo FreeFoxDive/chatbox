@@ -13,6 +13,7 @@ const processSentryEvent = createSentryEventProcessor({
 let sentryInitialized = false
 
 function initSentry(): boolean {
+  return false
   if (sentryInitialized) {
     return true
   }

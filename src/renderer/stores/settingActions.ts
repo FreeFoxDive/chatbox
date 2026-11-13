@@ -3,6 +3,7 @@ import { ModelProviderEnum } from '@shared/types'
 import { getDefaultStore } from 'jotai'
 import platform from '@/platform'
 import * as atoms from './atoms'
+import { clientRestrictionsLifted } from './entitlement'
 import { isChatboxAIProPlan } from './licensePlan'
 import { settingsStore } from './settingsStore'
 
@@ -63,10 +64,12 @@ export function getLicenseDetail() {
 }
 
 export function isPaid() {
+  if (clientRestrictionsLifted()) return true
   return !!getLicenseKey()
 }
 
 export function isPro() {
+  if (clientRestrictionsLifted()) return true
   const settings = settingsStore.getState()
   return !!settings.licenseKey && isChatboxAIProPlan(settings.licenseDetail, settings.licensePlanName)
 }

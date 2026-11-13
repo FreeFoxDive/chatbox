@@ -41,7 +41,8 @@ export function projectProviderCatalog(settings: Settings, platform: PlatformTyp
       (model) => !excluded.has(model.modelId)
     )
     const configured =
-      (definition.id === ModelProviderEnum.ChatboxAI && Boolean(settings.licenseKey?.trim())) ||
+      (definition.id === ModelProviderEnum.ChatboxAI &&
+        Boolean(settings.licenseKey?.trim() || persisted?.apiHost?.trim() || persisted?.apiKey?.trim())) ||
       hasCredentials(persisted, platform) ||
       Boolean(persisted?.models?.length)
     const runtimeSupported = isProviderAvailableOnPlatform(definition.id, platform)

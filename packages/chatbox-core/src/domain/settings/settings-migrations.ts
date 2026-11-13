@@ -56,7 +56,7 @@ export function migrateSettings(persisted: unknown, version: number, host: Setti
     const defaults = createDefaultSettings()
     const skills = settings.skills as Record<string, unknown> | undefined
     if (!skills) {
-      settings.skills = defaults.skills
+      settings.skills = { ...defaults.skills, translationEnabled: true }
     } else if (skills.translationEnabled === undefined) {
       skills.translationEnabled = true
     }

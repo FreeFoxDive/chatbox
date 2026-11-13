@@ -25,6 +25,8 @@ import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { GLASS_HOST_CLASS } from '@/lib/glass-surface'
 import { collapsedProvidersAtom } from '@/stores/atoms/uiAtoms'
+import { useAuthInfoStore } from '@/stores/authInfoStore'
+import { clientRestrictionsLifted } from '@/stores/entitlement'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import { ScalableIcon } from '../common/ScalableIcon'
@@ -75,6 +77,13 @@ export const ModelSelectorV2 = forwardRef<HTMLDivElement, ModelSelectorV2Props>(
     const chatboxAIExcludedModels = useSettingsStore(
       (state) => state.providers?.[ModelProviderEnum.ChatboxAI]?.excludedModels || EMPTY_MODEL_IDS
     )
+    const chatboxApiHost = useSettingsStore((state) => state.providers?.[ModelProviderEnum.ChatboxAI]?.apiHost)
+    const licenseActivationMethod = useSettingsStore((state) => state.licenseActivationMethod)
+    const officialAccessToken = useAuthInfoStore((state) => state.accessToken)
+    const restrictionsLifted = clientRestrictionsLifted()
+    void chatboxApiHost
+    void licenseActivationMethod
+    void officialAccessToken
     const [collapsedProviders, setCollapsedProviders] = useAtom(collapsedProvidersAtom)
     const activeTab = useUIStore((state) => state.modelSelectorTab)
     const setActiveTab = useUIStore((state) => state.setModelSelectorTab)
@@ -187,8 +196,9 @@ export const ModelSelectorV2 = forwardRef<HTMLDivElement, ModelSelectorV2Props>(
           const model = chatboxAIModelList.models[modelId]
           return model ? chatboxFilter(model) : false
         },
+        restrictionsLifted,
       })
-    }, [advancedExpanded, chatboxAIModelList, collapsedGroupIds, search, chatboxFilter])
+    }, [advancedExpanded, chatboxAIModelList, collapsedGroupIds, search, chatboxFilter, restrictionsLifted])
 
     const clearDesktopDetailCloseTimer = () => {
       if (desktopDetailCloseTimerRef.current) {

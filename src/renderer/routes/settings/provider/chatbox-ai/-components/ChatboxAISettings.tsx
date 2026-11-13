@@ -1,5 +1,9 @@
-import { Stack, Transition } from '@mantine/core'
+import { Button, PasswordInput, Stack, Text, TextInput, Transition } from '@mantine/core'
+import { isOfficialChatboxServer, normalizeChatboxServerOrigin } from '@shared/free-edition'
 import { type ModelProvider, ModelProviderEnum } from '@shared/types'
+import { ANONYMOUS_WORKSPACE, customWorkspaceNamespace } from '@shared/workspace-namespace'
+import { useTranslation } from 'react-i18next'
+import { enterWorkspace, getActiveWorkspaceNamespace } from '@/stores/workspaceIdentity'
 import { useRouterState } from '@tanstack/react-router'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import useChatboxAIModels from '@/hooks/useChatboxAIModels'
@@ -12,6 +16,61 @@ import { LoginView } from './LoginView'
 import { ModelManagement } from './ModelManagement'
 import type { ViewMode } from './types'
 import { useAuthTokens } from './useAuthTokens'
+
+function CustomChatboxServerPanel({ apiHost, apiKey }: { apiHost?: string; apiKey?: string }) {
+  const { t } = useTranslation()
+  const [host, setHost] = useState(apiHost || '')
+  const [accessKey, setAccessKey] = useState(apiKey || '')
+  const [error, setError] = useState('')
+
+  const save = async () => {
+    const origin = normalizeChatboxServerOrigin(host)
+    if (!origin || isOfficialChatboxServer(origin)) {
+      setError(t('Enter a custom Chatbox server URL') || 'Enter a custom Chatbox server URL')
+      return
+    }
+    setError('')
+    const namespace = await customWorkspaceNamespace(origin, accessKey.trim())
+    await enterWorkspace(namespace, {
+      providers: {
+        [ModelProviderEnum.ChatboxAI]: {
+          apiHost: origin,
+          apiKey: accessKey.trim() || undefined,
+        },
+      },
+    })
+  }
+
+  return (
+    <Stack gap="sm">
+      <TextInput
+        label={t('Custom server URL') || 'Custom server URL'}
+        description={t('Use your own Chatbox-compatible server without an official account.') || ''}
+        placeholder="https://example.com"
+        value={host}
+        onChange={(event) => setHost(event.currentTarget.value)}
+      />
+      <PasswordInput
+        label={t('Access key (optional)') || 'Access key (optional)'}
+        value={accessKey}
+        onChange={(event) => setAccessKey(event.currentTarget.value)}
+      />
+      {error ? (
+        <Text size="sm" c="dimmed">
+          {error}
+        </Text>
+      ) : null}
+      <Button variant="default" onClick={() => void save()}>
+        {t('Save custom server') || 'Save custom server'}
+      </Button>
+      {getActiveWorkspaceNamespace() !== ANONYMOUS_WORKSPACE ? (
+        <Button variant="subtle" c="chatbox-tertiary" onClick={() => void enterWorkspace(ANONYMOUS_WORKSPACE)}>
+          {t('Disconnect and return to this device') || 'Disconnect and return to this device'}
+        </Button>
+      ) : null}
+    </Stack>
+  )
+}
 
 export function ChatboxAISettings({ padded = false }: { padded?: boolean }) {
   const requestedView = useRouterState({
@@ -146,6 +205,8 @@ export function ChatboxAISettings({ padded = false }: { padded?: boolean }) {
   return (
     <Stack gap="xxl" p={padded ? 'md' : undefined}>
       {/* License Selection Modal */}
+      <CustomChatboxServerPanel apiHost={providerSettings?.apiHost} apiKey={providerSettings?.apiKey} />
+
       <LicenseSelectionModal
         opened={licenseModalState.show}
         licenses={licenseModalState.licenses}
@@ -217,11 +278,13 @@ export function ChatboxAISettings({ padded = false }: { padded?: boolean }) {
         onDeleteModel={deleteModel}
         onResetModels={resetModels}
         onFetchModels={refetchChatboxAIModels}
-        onAddModel={(model) =>
+        onAddModel={(model) => {
+          const models = providerSettings?.models || []
           setProviderSettings({
+            models: models.some((item) => item.modelId === model.modelId) ? models : [...models, model],
             excludedModels: (providerSettings?.excludedModels || []).filter((m) => m !== model.modelId),
           })
-        }
+        }}
         onRemoveModel={(modelId) =>
           setProviderSettings({
             excludedModels: [...(providerSettings?.excludedModels || []), modelId],

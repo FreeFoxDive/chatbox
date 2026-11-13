@@ -1,6 +1,7 @@
 import type { SessionMetaRepositoryPort } from '@chatbox/core/ports'
 import { applySortedSessionRecord, sortSessionRecords } from '@chatbox/core/utils/session-sort'
 import type { SessionMetaPage, SessionMetaRecord } from '@shared/types'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import { reportDbOpenSucceeded, toDbOpenError, watchDbOpenBlocked, watchDbVersionChange } from './db-schema-guard'
 
 const DB_NAME = 'chatbox-session-meta'
@@ -121,16 +122,17 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
       // `The requested version (X) is less than the existing version (Y)` —— 例如 1.22 → 1.21 降级后无法发消息。
       // 如确需引入 version/schema 变更：只做加法式变更（新 store/索引，keyPath 不变），
       // 并保留 db-schema-guard，让降级产生的 VersionError 显示更新引导，而不是静默改写数据。
-      const request = indexedDB.open(DB_NAME)
-      watchDbOpenBlocked(DB_NAME, request)
+      const dbName = activeDatabaseName(DB_NAME)
+      const request = indexedDB.open(dbName)
+      watchDbOpenBlocked(dbName, request)
 
-      request.onerror = () => reject(toDbOpenError(DB_NAME, request.error))
+      request.onerror = () => reject(toDbOpenError(dbName, request.error))
 
       request.onsuccess = () => {
         const db = request.result
         this.db = db
-        reportDbOpenSucceeded(DB_NAME)
-        watchDbVersionChange(DB_NAME, db, () => {
+        reportDbOpenSucceeded(dbName)
+        watchDbVersionChange(dbName, db, () => {
           if (this.db === db) {
             this.db = null
             this.initPromise = null

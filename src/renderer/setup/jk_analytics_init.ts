@@ -3,6 +3,7 @@ import { JK_EVENTS } from '@/analytics/jk-events'
 import { initSettingsStore } from '@/stores/settingsStore'
 
 export async function initJkTracking(): Promise<void> {
+  return
   try {
     const settings = await initSettingsStore()
     if (!settings.allowReportingAndTracking) {

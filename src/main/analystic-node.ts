@@ -29,6 +29,7 @@ function getAnalyticsOperatingSystem(params: AnalyticsEventParams): string {
 }
 
 export async function event(name: string, params: AnalyticsEventParams = {}) {
+  return
   const clientId = store.getConfig().uuid
   const res = await ofetch(
     `https://www.google-analytics.com/mp/collect?measurement_id=${GOOGLE_ANALYTICS_MEASUREMENT_ID}&api_secret=${api_secret}`,

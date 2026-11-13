@@ -16,7 +16,7 @@ import {
 } from '../../../models/utils/deepseek'
 import { maybeWrapGeminiErrorResponse } from '../../../models/utils/gemini-stream-error'
 import { maybeWrapOpenAIChatCompletionSseResponse } from '../../../models/utils/openai-chat-sse-termination'
-import { getChatboxAPIOrigin } from '../../../request/chatboxai_pool'
+import { resolveChatboxGatewayOrigin } from '../../../free-edition'
 import type { ToolUseScope } from '../../../types'
 import { type ChatboxAILicenseDetail, ModelProviderEnum, type ProviderModelInfo } from '../../../types'
 import type { ModelDependencies } from '../../../types/adapters'
@@ -31,6 +31,8 @@ import { buildGeminiImageConfig } from '../gemini-types'
 
 interface Options {
   licenseKey?: string
+  apiKey?: string
+  apiHost?: string
   model: ProviderModelInfo
   licenseInstances?: {
     [key: string]: string
@@ -112,8 +114,16 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
     return true
   }
 
+  private gatewayOrigin(): string {
+    return resolveChatboxGatewayOrigin(this.options.apiHost)
+  }
+
+  private credential(): string {
+    return this.options.apiKey?.trim() || this.options.licenseKey || ''
+  }
+
   private getChatHeaders(options: CallChatCompletionOptions): Record<string, string> {
-    const license = this.options.licenseKey || ''
+    const license = this.credential()
     const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
     return {
       'Instance-Id': instanceId,
@@ -125,35 +135,35 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
   protected getProvider(options: CallChatCompletionOptions) {
     if (this.options.model.apiStyle === 'google') {
       const provider = createGoogle({
-        apiKey: this.options.licenseKey || '',
-        baseURL: `${getChatboxAPIOrigin()}/gateway/google-ai-studio/v1beta`,
+        apiKey: this.credential(),
+        baseURL: `${this.gatewayOrigin()}/gateway/google-ai-studio/v1beta`,
         headers: {
           ...this.getChatHeaders(options),
-          Authorization: `Bearer ${this.options.licenseKey || ''}`,
+          Authorization: `Bearer ${this.credential()}`,
         },
         fetch: this.chatboxAIFetch.bind(this),
       })
       return provider
     } else if (this.options.model.apiStyle === 'anthropic') {
       const provider = createAnthropic({
-        apiKey: this.options.licenseKey || '',
-        baseURL: `${getChatboxAPIOrigin()}/gateway/anthropic/v1`,
+        apiKey: this.credential(),
+        baseURL: `${this.gatewayOrigin()}/gateway/anthropic/v1`,
         headers: this.getChatHeaders(options),
         fetch: this.chatboxAIFetch.bind(this),
       })
       return provider
     } else if (this.options.model.apiStyle === 'openai-responses') {
       const provider = createOpenAI({
-        apiKey: this.options.licenseKey || '',
-        baseURL: `${getChatboxAPIOrigin()}/gateway/openai-responses/v1`,
+        apiKey: this.credential(),
+        baseURL: `${this.gatewayOrigin()}/gateway/openai-responses/v1`,
         headers: this.getChatHeaders(options),
         fetch: this.chatboxAIFetch.bind(this),
       })
       return provider
     } else if (isDeepSeekReasoningModel(this.options.model.modelId)) {
       const provider = createDeepSeek({
-        apiKey: this.options.licenseKey || '',
-        baseURL: `${getChatboxAPIOrigin()}/gateway/openai/v1`,
+        apiKey: this.credential(),
+        baseURL: `${this.gatewayOrigin()}/gateway/openai/v1`,
         headers: this.getChatHeaders(options),
         fetch: this.chatboxAIFetch.bind(this),
       })
@@ -161,8 +171,8 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
     } else {
       const provider = createOpenAICompatible({
         name: 'ChatboxAI',
-        apiKey: this.options.licenseKey || '',
-        baseURL: `${getChatboxAPIOrigin()}/gateway/openai/v1`,
+        apiKey: this.credential(),
+        baseURL: `${this.gatewayOrigin()}/gateway/openai/v1`,
         headers: this.getChatHeaders(options),
         fetch: this.chatboxAIFetch.bind(this),
       })
@@ -368,14 +378,14 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
   }
 
   private getGoogleProvider(): GoogleProvider {
-    const license = this.options.licenseKey || ''
+    const license = this.credential()
     const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
     return createGoogle({
-      apiKey: this.options.licenseKey || '',
-      baseURL: `${getChatboxAPIOrigin()}/gateway/google-ai-studio/v1beta`,
+      apiKey: this.credential(),
+      baseURL: `${this.gatewayOrigin()}/gateway/google-ai-studio/v1beta`,
       headers: {
         'Instance-Id': instanceId,
-        Authorization: `Bearer ${this.options.licenseKey || ''}`,
+        Authorization: `Bearer ${this.credential()}`,
       },
       fetch: this.chatboxAIFetch.bind(this),
     })
@@ -409,10 +419,10 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
     aspectRatio?: string,
     signal?: AbortSignal
   ): Promise<string> {
-    const license = this.options.licenseKey || ''
+    const license = this.credential()
     const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
     const modelId = this.options.model.modelId
-    const res = await this.chatboxAIFetch(`${getChatboxAPIOrigin()}/api/ai/paint`, {
+    const res = await this.chatboxAIFetch(`${this.gatewayOrigin()}/api/ai/paint`, {
       headers: {
         Authorization: `Bearer ${license}`,
         'Instance-Id': instanceId,

@@ -1,4 +1,5 @@
 import type { BackupWorkspace } from '@chatbox/core/backup-v3'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import type { ByteSink, ClosableByteSource } from '@chatbox/core/io'
 import { reportDbOpenSucceeded, toDbOpenError, watchDbOpenBlocked, watchDbVersionChange } from './db-schema-guard'
 
@@ -37,8 +38,9 @@ export class IndexedDBBackupWorkspace implements BackupWorkspace {
     if (this.db) return this.db
     if (!this.opening)
       this.opening = new Promise<IDBDatabase>((resolve, reject) => {
-        const open = indexedDB.open(DB_NAME)
-        watchDbOpenBlocked(DB_NAME, open)
+        const dbName = activeDatabaseName(DB_NAME)
+        const open = indexedDB.open(dbName)
+        watchDbOpenBlocked(dbName, open)
         open.onupgradeneeded = () => {
           const db = open.result
           if (!db.objectStoreNames.contains('files')) db.createObjectStore('files')
@@ -50,14 +52,14 @@ export class IndexedDBBackupWorkspace implements BackupWorkspace {
             catalog.createIndex('order', ['job', 'table', 'id'])
           }
         }
-        open.onerror = () => reject(toDbOpenError(DB_NAME, open.error))
+        open.onerror = () => reject(toDbOpenError(dbName, open.error))
         open.onsuccess = () => {
           const db = open.result
-          watchDbVersionChange(DB_NAME, db, () => {
+          watchDbVersionChange(dbName, db, () => {
             this.db = null
             this.opening = null
           })
-          reportDbOpenSucceeded(DB_NAME)
+          reportDbOpenSucceeded(dbName)
           this.db = db
           resolve(db)
         }

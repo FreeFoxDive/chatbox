@@ -139,6 +139,7 @@ const getChatboxHeaders = async () => {
 // ========== 各个接口方法 ==========
 
 export async function checkNeedUpdate(version: string, os: string, config: Config, settings: Settings) {
+  return false
   type Response = {
     need_update?: boolean
   }
@@ -213,6 +214,7 @@ export async function recordCopilotUsage(params: {
   id: string
   action: 'create_session' | 'create_thread' | 'create_message' | 'use_copilot'
 }) {
+  return
   await ofetch(`${getAPIOrigin()}/api/system_copilots/record_usage`, {
     method: 'POST',
     body: {
@@ -223,6 +225,7 @@ export async function recordCopilotUsage(params: {
 }
 
 export async function recordCopilotShare(detail: CopilotDetail) {
+  return
   await ofetch(`${getAPIOrigin()}/api/copilots/share-record`, {
     method: 'POST',
     body: {
@@ -584,6 +587,7 @@ export async function parseUserLinkPro(params: { licenseKey: string; url: string
 }
 
 export async function parseUserLinkFree(params: { url: string }) {
+  throw new Error('Remote webpage fetch is disabled')
   type Response = {
     title: string
     text: string
@@ -671,10 +675,15 @@ const ModelManifestResponseSchema = z.object({
   }),
 })
 
-export async function getModelManifest(params: { aiProvider: ModelProvider; licenseKey?: string; language?: string }) {
+export async function getModelManifest(params: {
+  aiProvider: ModelProvider
+  licenseKey?: string
+  language?: string
+  apiOrigin?: string
+}) {
   const afetch = await getAfetch()
   const res = await afetch(
-    `${getAPIOrigin()}/api/model_manifest`,
+    `${params.apiOrigin || getAPIOrigin()}/api/model_manifest`,
     {
       method: 'POST',
       headers: {
@@ -767,10 +776,10 @@ const ChatboxAIModelListResponseSchema = z.object({
 
 export type ChatboxAIModelList = z.infer<typeof ChatboxAIModelListResponseSchema>['data']
 
-export async function getChatboxAIModelList(params: { licenseKey?: string; language?: string }) {
+export async function getChatboxAIModelList(params: { licenseKey?: string; language?: string; apiOrigin?: string }) {
   const afetch = await getAfetch()
   const res = await afetch(
-    `${getAPIOrigin()}/api/chatbox_ai/model_list`,
+    `${params.apiOrigin || getAPIOrigin()}/api/chatbox_ai/model_list`,
     {
       method: 'POST',
       headers: {

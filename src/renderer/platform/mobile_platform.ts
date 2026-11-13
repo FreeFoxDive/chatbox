@@ -1,9 +1,9 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
-import { Device } from '@capacitor/device'
 import type { SessionRowStorePort } from '@chatbox/core/ports'
 import { type AnalyticsEventParams, GOOGLE_ANALYTICS_MEASUREMENT_ID } from '@shared/analytics'
 import * as defaults from '@shared/defaults'
+import { activeStorageKey, blobKeysForActiveWorkspace } from '@shared/workspace-namespace'
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
@@ -14,7 +14,6 @@ import { SQLiteImageGenerationStorage } from '@/storage/SQLiteImageGenerationSto
 import { SQLiteSessionMetaStorage } from '@/storage/SQLiteSessionMetaStorage'
 import { SQLiteSessionRowStore } from '@/storage/SQLiteSessionRowStorage'
 import { CHATBOX_BUILD_PLATFORM } from '@/variables'
-import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import MobileExporter from './mobile_exporter'
@@ -171,33 +170,10 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
     }
   }
   public async getDeviceName(): Promise<string> {
-    try {
-      const info = await Device.getInfo()
-
-      // iOS: 直接返回 model 型号（如 "iPhone13,4"），官网会 mapping 成 "iPhone 13 Pro Max"
-      if (info.platform === 'ios') {
-        return info.model
-      }
-
-      // Android: 使用降级策略
-      // 优先使用 name（用户自定义的设备名称）
-      if (info.name) {
-        return info.name
-      }
-      // 如果没有 name，返回 manufacturer + model
-      if (info.manufacturer && info.model) {
-        return `${info.manufacturer} ${info.model}`
-      }
-      // 降级到 model 或 platform
-      return info.model || info.platform || getOS()
-    } catch (error) {
-      console.error('Failed to get device info:', error)
-      // 降级方案：返回 OS 信息
-      return getOS()
-    }
+    return 'Chatbox Client'
   }
   public async getInstanceName(): Promise<string> {
-    return `${getOS()} / ${getBrowser()}`
+    return 'Chatbox Client'
   }
   public async getLocale() {
     const lang = window.navigator.language
@@ -231,19 +207,20 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   }
 
   public async getStoreBlob(key: string): Promise<string | null> {
-    return localforage.getItem<string>(key)
+    return localforage.getItem<string>(activeStorageKey(key))
   }
   public async setStoreBlob(key: string, value: string): Promise<void> {
-    await localforage.setItem(key, value)
+    await localforage.setItem(activeStorageKey(key), value)
   }
   public async delStoreBlob(key: string) {
-    return localforage.removeItem(key)
+    return localforage.removeItem(activeStorageKey(key))
   }
   public async listStoreBlobKeys(): Promise<string[]> {
-    return localforage.keys()
+    return blobKeysForActiveWorkspace(await localforage.keys())
   }
 
   public async initTracking() {
+    return
     const conf = await this.getConfig()
     window.gtag('config', GOOGLE_ANALYTICS_MEASUREMENT_ID, {
       app_name: 'chatbox',
@@ -256,6 +233,7 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
     })
   }
   public trackingEvent(name: string, params: AnalyticsEventParams) {
+    return
     window.gtag('event', name, params)
   }
 

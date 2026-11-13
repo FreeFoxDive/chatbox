@@ -8,6 +8,9 @@ import { useTranslation } from 'react-i18next'
 import { trackUpgradeModelClick } from '@/analytics/model-selection'
 import type { ChatboxAIModelList } from '@/packages/remote'
 import platform from '@/platform'
+import { useAuthInfoStore } from '@/stores/authInfoStore'
+import { clientRestrictionsLifted } from '@/stores/entitlement'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { ScalableIcon } from '../common/ScalableIcon'
 import {
   type ChatboxAIGroupView,
@@ -87,6 +90,13 @@ export function ChatboxProviderRows({
   pageName?: string
 }) {
   const { t } = useTranslation()
+  const chatboxApiHost = useSettingsStore((state) => state.providers?.[ModelProviderEnum.ChatboxAI]?.apiHost)
+  const licenseActivationMethod = useSettingsStore((state) => state.licenseActivationMethod)
+  const officialAccessToken = useAuthInfoStore((state) => state.accessToken)
+  const restrictionsLifted = clientRestrictionsLifted()
+  void chatboxApiHost
+  void licenseActivationMethod
+  void officialAccessToken
   const selectedProviderMatches =
     selectedProviderId === provider.id ||
     (provider.name === 'Chatbox AI' && selectedProviderId === ModelProviderEnum.ChatboxAI)
@@ -116,7 +126,7 @@ export function ChatboxProviderRows({
         }),
         total: group.modelIds.length,
         isAdvanced: isChatboxAIAdvancedGroup(group.id),
-        isLocked: isChatboxAIModelLocked(group.id, catalog.license.plan),
+        isLocked: isChatboxAIModelLocked(group.id, catalog.license.plan, restrictionsLifted),
         isFeaturedOnly: false,
       }))
     : groups
@@ -129,7 +139,7 @@ export function ChatboxProviderRows({
         const locked = group.isLocked
         const disabledReason = locked
           ? undefined
-          : model.access.available
+          : restrictionsLifted || model.access.available
             ? modelDisabledCheck?.(providerModel, provider.id)
             : t('Unavailable')
         const detail: DetailModel = {

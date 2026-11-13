@@ -5,7 +5,14 @@ import path from 'path'
 import sanitizeFilename from 'sanitize-filename'
 import * as defaults from '../shared/defaults'
 import type { Config, Settings } from '../shared/types'
+import { namespacedStorageKey } from '../shared/workspace-namespace'
 import { getLogger } from './util'
+import { readPersistedWorkspaceNamespace, workspaceBlobDir } from './workspace-namespace-file'
+
+export function scopeStoreKey(key: string): string {
+  if (key !== 'settings') return key
+  return namespacedStorageKey(key, readPersistedWorkspaceNamespace())
+}
 
 const logger = getLogger('store-node')
 
@@ -67,7 +74,7 @@ async function autoBackup() {
 }
 
 export function getSettings(): Settings {
-  const settings = store.get<'settings'>('settings')
+  const settings = store.get(scopeStoreKey('settings') as 'settings')
   if (settings === undefined) {
     return defaults.settings()
   }
@@ -251,7 +258,7 @@ function checkConfigValid(filepath: string) {
 }
 
 export async function getStoreBlob(key: string) {
-  const filename = path.resolve(app.getPath('userData'), 'chatbox-blobs', sanitizeFilename(key))
+  const filename = path.resolve(workspaceBlobDir(app.getPath('userData')), sanitizeFilename(key))
   const exists = await fs.pathExists(filename)
   if (!exists) {
     return null
@@ -260,13 +267,13 @@ export async function getStoreBlob(key: string) {
 }
 
 export async function setStoreBlob(key: string, value: string) {
-  const filename = path.resolve(app.getPath('userData'), 'chatbox-blobs', sanitizeFilename(key))
+  const filename = path.resolve(workspaceBlobDir(app.getPath('userData')), sanitizeFilename(key))
   await fs.ensureDir(path.dirname(filename))
   return fs.writeFile(filename, value, { encoding: 'utf-8' })
 }
 
 export async function delStoreBlob(key: string) {
-  const filename = path.resolve(app.getPath('userData'), 'chatbox-blobs', sanitizeFilename(key))
+  const filename = path.resolve(workspaceBlobDir(app.getPath('userData')), sanitizeFilename(key))
   const exists = await fs.pathExists(filename)
   if (!exists) {
     return
@@ -275,10 +282,11 @@ export async function delStoreBlob(key: string) {
 }
 
 export async function listStoreBlobKeys() {
-  const dir = path.resolve(app.getPath('userData'), 'chatbox-blobs')
+  const dir = workspaceBlobDir(app.getPath('userData'))
   const exists = await fs.pathExists(dir)
   if (!exists) {
     return []
   }
-  return fs.readdir(dir)
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
 }

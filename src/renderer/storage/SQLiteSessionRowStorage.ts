@@ -1,4 +1,5 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import {
   SessionRowConflictError,
   type SessionRowSqlBatchOptions,
@@ -555,13 +556,20 @@ export class SQLiteSessionRowStore implements SessionRowStorePort {
 
   private async openDatabase(): Promise<SQLiteDBConnection> {
     try {
-      await this.sqlite.closeConnection(DB_NAME, false)
+      await this.sqlite.closeConnection(activeDatabaseName(DB_NAME), false)
     } catch {
       // ignore - connection may not exist
     }
 
     // Android row transactions own cleanup and require physical DELETE semantics.
-    const database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false, true)
+    const database = await this.sqlite.createConnection(
+      activeDatabaseName(DB_NAME),
+      false,
+      'no-encryption',
+      1,
+      false,
+      true
+    )
     await database.open()
     return database
   }

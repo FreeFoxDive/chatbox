@@ -1,9 +1,7 @@
 /// <reference types="vite/client" />
 
-import { startChatboxAPIOriginProbing } from '@shared/request/chatboxai_pool'
 import type { Settings } from '@shared/types'
 import { getDefaultStore } from 'jotai'
-import localforage from 'localforage'
 import i18n from '@/i18n'
 import { getLogger } from '@/lib/utils'
 import { sessionStartupRecovery } from '@/packages/session-startup-recovery'
@@ -25,6 +23,7 @@ import { initLoginLicenseStateReconciliation } from '@/stores/premiumActions'
 import { initRecentDirectoriesStore } from '@/stores/recentDirectoriesStore'
 import { isSessionGenerating } from '@/stores/sessionActivityStore'
 import { initSettingsStore } from '@/stores/settingsStore'
+import { applyPendingWorkspaceSeed } from '@/stores/workspaceIdentity'
 import { initUpdateListeners } from '@/stores/updateStore'
 import { reportError } from '@/utils/sentry'
 import type { RendererApplication } from './createRendererApplication'
@@ -46,15 +45,7 @@ function isSessionWorkInFlight(): boolean {
 /** Runs the pre-render migration and telemetry phase in its historical order. */
 export async function initializeRenderer(): Promise<void> {
   log.info('initializeApp')
-  const apiOriginStore = localforage.createInstance({ name: 'chatboxcache' })
-  startChatboxAPIOriginProbing({
-    storage: {
-      get: (key) => apiOriginStore.getItem(key),
-      set: async (key, value) => {
-        await apiOriginStore.setItem(key, value)
-      },
-    },
-  })
+  await applyPendingWorkspaceSeed()
   await (await import('./renderer-backup')).rendererBackupService.cleanupBeforeBootstrap()
 
   let migrationError: unknown

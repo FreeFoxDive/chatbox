@@ -170,7 +170,7 @@ export default defineConfig(({ mode }) => {
               }),
             ]
           : [externalizeDepsPlugin()]),
-        process.env.SENTRY_AUTH_TOKEN
+        false && process.env.SENTRY_AUTH_TOKEN
           ? sentryVitePlugin({
               authToken: process.env.SENTRY_AUTH_TOKEN,
               org: 'sentry',
@@ -273,7 +273,7 @@ export default defineConfig(({ mode }) => {
           open: false,
           title: 'Renderer Process Dependency Analysis',
         }),
-        process.env.SENTRY_AUTH_TOKEN
+        false && process.env.SENTRY_AUTH_TOKEN
           ? sentryVitePlugin({
               authToken: process.env.SENTRY_AUTH_TOKEN,
               org: 'sentry',

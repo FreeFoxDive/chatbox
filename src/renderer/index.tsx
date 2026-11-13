@@ -32,9 +32,6 @@ import './setup/load_polyfill'
 
 // Publish the automation contract version during renderer startup.
 import './setup/automation_contract'
-// 引入保护代码
-import './setup/protect'
-
 // 开发环境下引入错误测试工具
 // if (process.env.NODE_ENV === 'development') {
 //   import('./utils/error-testing')

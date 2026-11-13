@@ -26,8 +26,6 @@ import { ICON_SIZE, ICON_STROKE_WIDTH, IconButton, type IconButtonProps } from '
 import { ScalableIcon } from './components/common/ScalableIcon'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
 import { useAppTitleBarHeight } from './components/layout/AppTitleBar'
-import { SidebarDesktopDownloadCard, useWebAppDownloadPromptVisible } from './components/layout/DesktopDownloadReminder'
-import { SidebarLowQuotaReminder } from './components/layout/LowQuotaReminder'
 import { overlayStackAtom } from './components/layout/Overlay'
 import { formatShortcut } from './components/Shortcut'
 import SessionList from './components/session/SessionList'
@@ -79,8 +77,6 @@ export default function Sidebar() {
 
   const isSmallScreen = useIsSmallScreen()
   const showDownloadApp = CHATBOX_BUILD_PLATFORM === 'web'
-  const webAppDownloadPromptVisible = useWebAppDownloadPromptVisible()
-  const showDesktopDownloadCard = showDownloadApp && !isSmallScreen && webAppDownloadPromptVisible
 
   const [isResizing, setIsResizing] = useState(false)
   const resizeStartX = useRef<number>(0)
@@ -289,19 +285,9 @@ export default function Sidebar() {
 
         <SidebarUpdateBanner />
 
-        <Box px="xs" pb="xs" className="empty:hidden">
-          <SidebarLowQuotaReminder />
-        </Box>
-
-        {showDesktopDownloadCard && (
-          <Box px="xs" pb="xs">
-            <SidebarDesktopDownloadCard />
-          </Box>
-        )}
-
         <Stack gap="xs" px="xs" pb="xs">
           <Divider />
-          {showDownloadApp && !showDesktopDownloadCard && (
+          {showDownloadApp && (
             <SidebarNavRow
               testId={TestId.sidebar.downloadApp}
               label={t('Download app')}

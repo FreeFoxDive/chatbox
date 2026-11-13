@@ -1,8 +1,10 @@
+import { ANONYMOUS_WORKSPACE } from '@shared/workspace-namespace'
 import { useCallback, useMemo, useState } from 'react'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import * as premiumActions from '@/stores/premiumActions'
 import queryClient from '@/stores/queryClient'
 import { settingsStore } from '@/stores/settingsStore'
+import { enterWorkspace, getActiveWorkspaceNamespace } from '@/stores/workspaceIdentity'
 import type { AuthTokens } from './types'
 
 export function useAuthTokens() {
@@ -46,6 +48,10 @@ export function useAuthTokens() {
       })
 
       authInfoStore.getState().clearTokens()
+
+      if (getActiveWorkspaceNamespace() !== ANONYMOUS_WORKSPACE) {
+        await enterWorkspace(ANONYMOUS_WORKSPACE)
+      }
 
       queryClient.removeQueries({ queryKey: ['userProfile'] })
       queryClient.removeQueries({ queryKey: ['userLicenses'] })

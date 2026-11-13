@@ -40,6 +40,7 @@ import {
   deleteStoredMessage,
   type StoredMessageRow,
 } from './session-row-idb-messages'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import {
   SESSION_ROW_DB_NAME,
   SESSION_ROW_THREAD_STORE,
@@ -183,7 +184,7 @@ export class IndexedDBSessionRowStore implements SessionRowStorePort {
 
   private async openDatabase(generation = this.openGeneration): Promise<void> {
     const db = await openSessionRowDatabase(
-      SESSION_ROW_DB_NAME,
+      activeDatabaseName(SESSION_ROW_DB_NAME),
       () => generation === this.openGeneration,
       (db) => {
         if (this.db === db) this.close()

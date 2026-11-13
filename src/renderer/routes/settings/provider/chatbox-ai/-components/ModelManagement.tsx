@@ -1,4 +1,4 @@
-import { Button, Flex, Stack, Text } from '@mantine/core'
+import { Button, Flex, Stack, Text, TextInput } from '@mantine/core'
 import type { ProviderModelInfo } from '@shared/types'
 import { IconRefresh, IconRestore } from '@tabler/icons-react'
 import { useState } from 'react'
@@ -28,6 +28,14 @@ export function ModelManagement({
 }: ModelManagementProps) {
   const { t } = useTranslation()
   const [showFetchedModels, setShowFetchedModels] = useState(false)
+  const [modelId, setModelId] = useState('')
+
+  const addModel = () => {
+    const trimmed = modelId.trim()
+    if (!trimmed) return
+    onAddModel({ modelId: trimmed, nickname: trimmed, type: 'chat' })
+    setModelId('')
+  }
 
   const handleFetchModels = () => {
     onFetchModels()
@@ -69,6 +77,20 @@ export function ModelManagement({
         </Flex>
 
         <ModelList models={chatboxAIModels} showActions={true} onDeleteModel={onDeleteModel} showSearch={false} />
+        <Flex gap="xs" align="end">
+          <TextInput
+            style={{ flex: 1 }}
+            label={t('Add a model ID') || 'Add a model ID'}
+            value={modelId}
+            onChange={(event) => setModelId(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') addModel()
+            }}
+          />
+          <Button variant="default" onClick={addModel}>
+            {t('Add') || 'Add'}
+          </Button>
+        </Flex>
       </Stack>
 
       <AdaptiveModal

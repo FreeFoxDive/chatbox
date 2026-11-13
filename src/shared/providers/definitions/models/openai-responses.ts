@@ -86,7 +86,6 @@ export default class OpenAIResponses extends AbstractAISDKModel {
     }
     if (this.options.apiHost.includes('aihubmix.com')) {
       return {
-        'APP-Code': 'VAFU9221',
       }
     }
     return undefined

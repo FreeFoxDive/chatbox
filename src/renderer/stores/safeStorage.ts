@@ -1,4 +1,9 @@
+import { namespacedStorageKey, readActiveWorkspaceNamespaceFromLocalStorage } from '@shared/workspace-namespace'
 import type { PersistStorage, StorageValue } from 'zustand/middleware'
+
+function scopedStorageKey(name: string): string {
+  return namespacedStorageKey(name, readActiveWorkspaceNamespaceFromLocalStorage())
+}
 
 const getBrowserStorage = (): Storage | undefined => {
   try {
@@ -18,7 +23,7 @@ export const safeStorage: PersistStorage<unknown> = {
       return null
     }
     try {
-      const value = storage.getItem(name)
+      const value = storage.getItem(scopedStorageKey(name))
       if (!value) {
         return null
       }
@@ -33,7 +38,7 @@ export const safeStorage: PersistStorage<unknown> = {
       return
     }
     try {
-      storage.setItem(name, JSON.stringify(value))
+      storage.setItem(scopedStorageKey(name), JSON.stringify(value))
     } catch {
       // ignore persistence errors so callers don't fail
     }
@@ -44,7 +49,7 @@ export const safeStorage: PersistStorage<unknown> = {
       return
     }
     try {
-      storage.removeItem(name)
+      storage.removeItem(scopedStorageKey(name))
     } catch {
       // ignore persistence errors so callers don't fail
     }

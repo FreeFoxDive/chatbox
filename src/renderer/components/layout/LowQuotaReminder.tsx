@@ -7,6 +7,7 @@ import {
 } from '@/packages/chatbox-cli/compute-points'
 import { buildChatboxUrl, getLicenseDetailRealtime } from '@/packages/remote'
 import platform from '@/platform'
+import { clientRestrictionsLifted } from '@/stores/entitlement'
 import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import { uiStore, useUIStore } from '@/stores/uiStore'
 
@@ -17,12 +18,15 @@ export function SidebarLowQuotaReminder() {
   const { t, i18n } = useTranslation()
   const language = useLanguage()
   const licenseKey = useSettingsStore((state) => state.licenseKey)
+  const licenseActivationMethod = useSettingsStore((state) => state.licenseActivationMethod)
   const dismissedPeriod = useUIStore((state) => state.lowQuotaReminderDismissedPeriod)
+  const restrictionsLifted = clientRestrictionsLifted()
+  void licenseActivationMethod
 
   const { data: detail } = useQuery({
     queryKey: ['sidebar-low-quota', licenseKey],
     queryFn: async () => (await getLicenseDetailRealtime({ licenseKey: licenseKey ?? '' })).data,
-    enabled: !!licenseKey,
+    enabled: !!licenseKey && !restrictionsLifted,
     staleTime: 30_000,
     // Poll fast once points get close to the threshold so the bar moves while a reply is generating.
     refetchInterval: (query) =>
@@ -30,7 +34,7 @@ export function SidebarLowQuotaReminder() {
     refetchOnWindowFocus: 'always',
   })
 
-  if (!detail || detail.expansion_pack_limit - detail.expansion_pack_usage > 0) return null
+  if (restrictionsLifted || !detail || detail.expansion_pack_limit - detail.expansion_pack_usage > 0) return null
   const ratio = getComputePointsRemainingRatio(detail)
   // A new quota period gets a fresh reminder.
   const period = `${licenseKey}:${detail.token_refreshed_time}`

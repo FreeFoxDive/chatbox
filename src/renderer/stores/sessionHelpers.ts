@@ -41,6 +41,7 @@ import { resolveChatboxLicenseDefaultModel } from './defaultChatModel'
 import { lastUsedModelStore } from './lastUsedModelStore'
 import { getSessionAgentModeEntry } from './session/agent-mode'
 import { SESSION_ATTACHMENT_RAG_LARGE_ATTACHMENT_WARNING } from './sessionAttachmentRagErrors'
+import { clientRestrictionsLifted } from './entitlement'
 import * as settingActions from './settingActions'
 import { getPlatformDefaultDocumentParser, settingsStore } from './settingsStore'
 
@@ -776,7 +777,7 @@ async function preprocessLinkAccepted(
   error?: string
 }> {
   try {
-    const isPro = settingActions.isPro()
+    const isPro = !clientRestrictionsLifted() && settingActions.isPro()
     const uniqKey = StorageKeyGenerator.linkUniqKey(url)
 
     // 检查是否已经处理过这个链接

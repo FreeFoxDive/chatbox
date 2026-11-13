@@ -31,6 +31,7 @@ import { reportError } from '@/utils/sentry'
 import { SESSION_ATTACHMENT_RAG_LOG_PREFIX } from '../../../shared/session-attachment-rag/logging'
 import { markSessionReplyFailed } from '../sessionActivityStore'
 import { ensureMessageFileSessionAttachment } from '../sessionAttachmentRagIndexing'
+import { clientRestrictionsLifted } from '../entitlement'
 import * as settingActions from '../settingActions'
 import { settingsStore } from '../settingsStore'
 import { guardSessionAction } from './action-guard'
@@ -368,7 +369,7 @@ export async function submitNewUserMessageUnlocked(
   }
 
   const globalSettings = settingsStore.getState().getSettings()
-  const isPro = settingActions.isPro()
+  const isPro = !clientRestrictionsLifted() && settingActions.isPro()
   const remoteConfig = await settingActions.getRemoteConfig()
 
   // 根据需要，插入空白的回复消息

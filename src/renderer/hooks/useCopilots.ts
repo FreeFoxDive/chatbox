@@ -68,14 +68,16 @@ type RemoteCopilotsByCursorFilters = {
   limit?: number
   tag?: string
   search?: string
+  enabled?: boolean
 }
 
 export function useRemoteCopilotsByCursor(filters?: RemoteCopilotsByCursorFilters) {
   const language = useLanguage()
-  const { limit = 12, tag, search } = filters ?? {}
+  const { limit = 12, tag, search, enabled = true } = filters ?? {}
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, ...others } = useInfiniteQuery({
     queryKey: ['remote-copilots-cursor', language, limit, tag, search],
+    enabled,
     queryFn: ({ pageParam }) => remote.listCopilotsByCursor(language, { limit, cursor: pageParam, tag, search }),
     getNextPageParam: (lastPage) => lastPage.next_cursor,
     initialPageParam: undefined as string | undefined,

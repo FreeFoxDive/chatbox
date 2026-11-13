@@ -77,7 +77,6 @@ export default class CustomOpenAI extends AbstractAISDKModel {
           }
         : this.options.apiHost.includes('aihubmix.com')
           ? {
-              'APP-Code': 'VAFU9221',
             }
           : undefined,
     })

@@ -1,0 +1,131 @@
+name: Android Release
+
+on:
+  push:
+    branches:
+      - free
+    tags:
+      - 'v*'
+      - 'free-*'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Create or update a GitHub Release with the APKs
+        type: boolean
+        default: true
+      release_tag:
+        description: Release tag to create when publishing manually
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout free branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'free' || github.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build renderer and sync Capacitor
+        run: pnpm run cap:sync:android
+
+      - name: Assemble signed release APK
+        working-directory: android
+        run: chmod +x ./gradlew && ./gradlew assembleRelease --no-daemon
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Name APKs and write checksums
+        id: artifacts
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./release/app/package.json').version")"
+          mkdir -p dist/android
+          shopt -s nullglob
+          copied=0
+          for apk in android/app/build/outputs/apk/release/*.apk; do
+            base="$(basename "$apk")"
+            case "$base" in
+              *arm64*) name="Chatbox-Free-v${version}-android-arm64-v8a.apk" ;;
+              *armeabi*) name="Chatbox-Free-v${version}-android-armeabi-v7a.apk" ;;
+              *x86_64*) name="Chatbox-Free-v${version}-android-x86_64.apk" ;;
+              *universal*|*release*) name="Chatbox-Free-v${version}-android-universal.apk" ;;
+              *) name="Chatbox-Free-v${version}-android-${base}" ;;
+            esac
+            cp "$apk" "dist/android/${name}"
+            (cd dist/android && sha256sum "${name}" > "${name}.sha256")
+            copied=$((copied + 1))
+          done
+          if [ "$copied" -eq 0 ]; then
+            echo "No release APK was produced" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatbox-free-android-${{ steps.artifacts.outputs.version }}
+          path: dist/android/*
+          if-no-files-found: error
+
+      - name: Resolve release tag
+        id: release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=free-v${{ steps.artifacts.outputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish GitHub Release
+        if: steps.release.outputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Chatbox Free ${{ steps.artifacts.outputs.version }}
+          generate_release_notes: true
+          files: dist/android/*

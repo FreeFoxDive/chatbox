@@ -1,6 +1,7 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
 import { CAPACITOR_IMAGE_GENERATION_SCHEMA_SQL } from '@chatbox/core'
 import type { ImageGeneration, ImageGenerationPage } from '@shared/types'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import type { ImageGenerationStorage } from './ImageGenerationStorage'
 
 const PAGE_SIZE = 20
@@ -25,13 +26,13 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
 
   private async openDatabase(): Promise<void> {
     try {
-      this.sqlite.closeConnection(DB_NAME, false)
+      this.sqlite.closeConnection(activeDatabaseName(DB_NAME), false)
     } catch {
       // ignore - connection may not exist
     }
 
     // Bump version to 2 for new columns
-    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 2, false)
+    this.database = await this.sqlite.createConnection(activeDatabaseName(DB_NAME), false, 'no-encryption', 2, false)
     await this.database.open()
 
     await this.database.execute(CAPACITOR_IMAGE_GENERATION_SCHEMA_SQL)

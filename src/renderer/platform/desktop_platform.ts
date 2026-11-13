@@ -13,6 +13,7 @@ import type {
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import type { WorkspaceInstructionsResult } from '@shared/types/workspace-instructions'
 import { cache } from '@shared/utils/cache'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
 import { parseLocale } from '@/i18n/parser'
@@ -32,7 +33,7 @@ import { parseTextFileLocally } from './web_platform_utils'
 
 const log = getLogger('desktop-platform')
 
-const store = localforage.createInstance({ name: 'chatboxstore' })
+const store = localforage.createInstance({ name: activeDatabaseName('chatboxstore') })
 
 export default class DesktopPlatform implements Platform {
   public type: PlatformType = 'desktop'
@@ -117,12 +118,14 @@ export default class DesktopPlatform implements Platform {
     return this.ipc.invoke('openLink', url)
   }
   public async getDeviceName(): Promise<string> {
+    return 'Chatbox Client'
     const deviceName = await cache('ipc:getDeviceName', () => this.ipc.invoke('getDeviceName'), {
       ttl: 5 * 60 * 1000,
     })
     return deviceName
   }
   public async getInstanceName(): Promise<string> {
+    return 'Chatbox Client'
     const deviceName = await this.getDeviceName()
     return `${deviceName} / ${getOS()}`
   }
@@ -230,6 +233,7 @@ export default class DesktopPlatform implements Platform {
     // Desktop events are sent through the main-process Measurement Protocol bridge.
   }
   public async trackingEvent(name: string, params: AnalyticsEventParams): Promise<void> {
+    return
     const chatboxPlatform = await this.getPlatform()
     const dataJson = JSON.stringify({
       name,

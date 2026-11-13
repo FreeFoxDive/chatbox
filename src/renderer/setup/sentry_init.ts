@@ -12,6 +12,7 @@ const processSentryEvent = createSentryEventProcessor({
 let sentryInitPromise: Promise<boolean> | undefined
 
 async function initializeSentry(): Promise<boolean> {
+  return false
   try {
     const settings = await initSettingsStore()
     if (!settings.allowReportingAndTracking) {

@@ -21,8 +21,8 @@ describe('defaults', () => {
     expect(result.messageLayout).toBe('classic')
   })
 
-  it('settings() returns allowReportingAndTracking as true', () => {
-    expect(settings().allowReportingAndTracking).toBe(true)
+  it('settings() keeps reporting and tracking off', () => {
+    expect(settings().allowReportingAndTracking).toBe(false)
   })
 
   it('uses default interface colors for legacy settings', () => {

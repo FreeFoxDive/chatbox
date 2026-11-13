@@ -17,9 +17,6 @@ export async function resolveContextSandbox(options: {
     sandboxProvider.setExtraWritableDirs(workingDirectories)
   }
   let canExecuteCode = Boolean(sandboxProvider && options.model.isSupportToolUse('agent'))
-  if (canExecuteCode && sandboxProvider?.type === 'cloud' && !options.isPro()) {
-    canExecuteCode = false
-  }
   if (canExecuteCode && sandboxProvider) {
     canExecuteCode = (await sandboxProvider.checkAvailability()).available
   }

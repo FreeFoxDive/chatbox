@@ -84,10 +84,10 @@ export function getSettingsNavGroups(): SettingsNavGroup[] {
   ]
 
   return [
-    { title: 'Account', items: [{ key: 'chatbox-ai', label: 'Chatbox AI', noTranslate: true, icon: IconSparkles }] },
     {
       title: 'Models',
       items: [
+        { key: 'chatbox-ai', label: 'Chatbox AI', noTranslate: true, icon: IconSparkles },
         { key: 'provider', label: 'Model Provider', icon: IconCategory },
         {
           key: 'default-models',

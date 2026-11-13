@@ -1,3 +1,4 @@
+import { resolveChatboxGatewayOrigin } from '@shared/free-edition'
 import { type ChatboxAILicenseDetail, ModelProviderEnum, type ProviderModelInfo } from '@shared/types'
 import { type QueryFilters, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
@@ -67,22 +68,38 @@ const useChatboxAIModels = () => {
   const language = useLanguage()
   const { providerSettings: chatboxAISettings, setProviderSettings } = useProviderSettings(ModelProviderEnum.ChatboxAI)
   const licenseKey = useSettingsStore((state) => state.licenseKey)
+  const apiHost = chatboxAISettings?.apiHost
+  const apiKey = chatboxAISettings?.apiKey
+  const apiOrigin = resolveChatboxGatewayOrigin(apiHost)
+  const canFetchModels = Boolean(apiHost?.trim() || apiKey?.trim() || licenseKey)
 
   const { data, ...others } = useQuery({
-    queryKey: [CHATBOX_AI_MODELS_QUERY_KEY, language, licenseKey],
+    queryKey: [CHATBOX_AI_MODELS_QUERY_KEY, language, licenseKey, apiOrigin, apiKey],
+    enabled: canFetchModels,
     queryFn: async () => {
-      const [manifest, modelList] = await Promise.all([
+      const [manifestResult, modelList] = await Promise.all([
         getModelManifest({
           aiProvider: ModelProviderEnum.ChatboxAI,
-          licenseKey,
+          licenseKey: apiKey || licenseKey,
           language,
-        }),
-        getChatboxAIModelList({ licenseKey, language }).catch((error) => {
+          apiOrigin,
+        }).then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => {
+            console.error('[Chatbox AI model_manifest] failed', error)
+            return { ok: false as const, error }
+          }
+        ),
+        getChatboxAIModelList({ licenseKey: apiKey || licenseKey, language, apiOrigin }).catch((error) => {
           console.error('[Chatbox AI model_list] failed', error)
           return null
         }),
       ])
       const modelListModels = modelListToProviderModels(modelList)
+      if (!manifestResult.ok && !modelList) throw manifestResult.error
+      const manifest = manifestResult.ok
+        ? manifestResult.value
+        : { groupName: 'Chatbox AI', models: [], imageModels: [] }
       const models = modelListModels.length > 0 ? modelListModels : manifest.models.map(toProviderModelInfo)
 
       // 只更新 ChatboxAI provider 的 models 配置，不影响其他 provider
@@ -103,7 +120,7 @@ const useChatboxAIModels = () => {
       }
     },
     staleTime: 3600 * 1000,
-    refetchOnWindowFocus: 'always',
+    refetchOnWindowFocus: false,
   })
 
   const allChatboxAIModels = useMemo(

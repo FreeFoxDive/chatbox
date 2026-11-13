@@ -1,8 +1,11 @@
+import { isOfficialChatboxServer } from '@shared/free-edition'
 import {
   prepareLicenseActivation,
   licenseActivationSettings,
   licenseDeactivationSettings,
 } from '@shared/services/license-activation'
+import { ModelProviderEnum } from '@shared/types'
+import { ANONYMOUS_WORKSPACE, licenseWorkspaceNamespace, officialWorkspaceNamespace } from '@shared/workspace-namespace'
 import omit from 'lodash/omit'
 import { FetchError } from 'ofetch'
 import { useEffect } from 'react'
@@ -15,6 +18,7 @@ import * as remote from '../packages/remote'
 import platform from '../platform'
 import { authInfoStore } from './authInfoStore'
 import { settingsStore, useSettingsStore } from './settingsStore'
+import { enterWorkspace, freezeSettingsWrites, getActiveWorkspaceNamespace } from './workspaceIdentity'
 
 const log = getLogger('premium-actions')
 
@@ -81,6 +85,8 @@ export function useAutoValidate(): boolean {
   }
   useEffect(() => {
     void (async () => {
+      const chatboxHost = settingsStore.getState().providers?.[ModelProviderEnum.ChatboxAI]?.apiHost
+      if (!isOfficialChatboxServer(chatboxHost)) return
       if (!licenseKey || !licenseInstances) {
         // 这里不清除数据，因为可能是本地数据尚未加载
         return
@@ -189,10 +195,27 @@ export async function activate(
   }
   const previous = settingsStore.getState()
   const switching = !!previous.licenseKey && previous.licenseKey !== result.licenseKey
+  const identity = options?.accountEmail || result.licenseKey
+  const targetNamespace =
+    method === 'login' ? await officialWorkspaceNamespace(identity) : await licenseWorkspaceNamespace(result.licenseKey)
+  const isolate = process.env.NODE_ENV !== 'test' && targetNamespace !== getActiveWorkspaceNamespace()
+  if (isolate) freezeSettingsWrites()
   settingsStore.setState((current) => ({
     ...licenseActivationSettings(current, result, method, options?.accountEmail),
     ...(switching ? { mcp: { ...current.mcp, enabledBuiltinServers: [] } } : {}),
   }))
+  if (isolate) {
+    const licensed = settingsStore.getState()
+    await enterWorkspace(targetNamespace, {
+      licenseKey: licensed.licenseKey,
+      licenseDetail: licensed.licenseDetail,
+      licensePlanName: licensed.licensePlanName,
+      licenseActivationMethod: licensed.licenseActivationMethod,
+      licenseInstances: licensed.licenseInstances,
+      hasExpiredLicense: licensed.hasExpiredLicense,
+    })
+    return result
+  }
   if (switching) {
     previous.mcp.enabledBuiltinServers.forEach((serverId) => {
       mcpController.stopServer(serverId).catch(console.error)

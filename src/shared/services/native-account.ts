@@ -10,6 +10,8 @@ export interface NativeAccountRequestOptions {
   fetchFn?: NativeFetch
   signal?: AbortSignalLike
   headers?: Record<string, string>
+  /** Keep models the official plan marks unavailable. Used by custom servers and logged-out clients. */
+  includeUnavailable?: boolean
 }
 
 export interface NativeAccountTokens {
@@ -329,7 +331,13 @@ async function fetchNativeChatboxAIModelList(
     if (!model) return []
     const value = candidate as Record<string, unknown>
     const access = value.access
-    const available = !(access && typeof access === 'object' && 'available' in access && access.available === false)
+    const serverAvailable = !(
+      access &&
+      typeof access === 'object' &&
+      'available' in access &&
+      access.available === false
+    )
+    const available = options.includeUnavailable || serverAvailable
     const detail: NativeChatboxAIModelDetail = {
       modelId: model.modelId,
       modelName: model.nickname,
@@ -342,7 +350,9 @@ async function fetchNativeChatboxAIModelList(
     }
     return [{ model, detail }]
   })
-  const availableModels = normalizedModels.filter(({ detail }) => detail.available).map(({ model }) => model)
+  const availableModels = normalizedModels
+    .filter(({ detail }) => options.includeUnavailable || detail.available)
+    .map(({ model }) => model)
   const modelDetails = Object.fromEntries(normalizedModels.map(({ detail }) => [detail.modelId, detail]))
   const groups = Array.isArray(data.groups)
     ? data.groups.flatMap((candidate: unknown) => {

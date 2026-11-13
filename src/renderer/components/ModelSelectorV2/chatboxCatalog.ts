@@ -19,7 +19,12 @@ export function isChatboxAIAdvancedGroup(groupId: string): boolean {
   return groupId === 'advanced'
 }
 
-export function isChatboxAIModelLocked(groupId: string, plan: ChatboxAIPlan): boolean {
+export function isChatboxAIModelLocked(
+  groupId: string,
+  plan: ChatboxAIPlan,
+  restrictionsLifted = false
+): boolean {
+  if (restrictionsLifted) return false
   return isChatboxAIAdvancedGroup(groupId) && !isChatboxAIProPlan(plan)
 }
 
@@ -47,13 +52,14 @@ export function buildChatboxAIGroupViews(params: {
   expandedAdvanced: boolean
   collapsedGroupIds: Set<string>
   modelFilter?: (modelId: string) => boolean
+  restrictionsLifted?: boolean
 }): ChatboxAIGroupView[] {
-  const { catalog, search, expandedAdvanced, collapsedGroupIds, modelFilter } = params
+  const { catalog, search, expandedAdvanced, collapsedGroupIds, modelFilter, restrictionsLifted = false } = params
   const isSearching = search.trim().length > 0
 
   return catalog.groups.map((group) => {
     const isAdvanced = isChatboxAIAdvancedGroup(group.id)
-    const isLocked = isChatboxAIModelLocked(group.id, catalog.license.plan)
+    const isLocked = isChatboxAIModelLocked(group.id, catalog.license.plan, restrictionsLifted)
     const featuredIds = group.featuredModelIds?.length ? group.featuredModelIds : group.modelIds
     const shouldShowFeaturedOnly = isAdvanced && isLocked && !expandedAdvanced && !isSearching
     const sourceIds = shouldShowFeaturedOnly ? featuredIds : group.modelIds

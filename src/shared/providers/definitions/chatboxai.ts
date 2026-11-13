@@ -13,7 +13,9 @@ export const chatboxAIProvider = defineProvider({
   createModel: (config) => {
     return new ChatboxAI(
       {
-        licenseKey: config.globalSettings.licenseKey,
+        licenseKey: config.providerSetting?.apiKey || config.globalSettings.licenseKey,
+        apiKey: config.providerSetting?.apiKey,
+        apiHost: config.providerSetting?.apiHost,
         model: config.model,
         licenseInstances: config.globalSettings.licenseInstances,
         licenseDetail: config.globalSettings.licenseDetail,

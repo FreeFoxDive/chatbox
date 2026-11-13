@@ -15,6 +15,7 @@ import { MAX_WORKSPACE_FILE_BYTES } from '@shared/mobile-work/workspace-path'
 import i18n from '@/i18n'
 import { parsePdfFileLocally } from '@/packages/pdf-parser'
 import { uploadAndParseUserFile } from '@/packages/remote'
+import { clientRestrictionsLifted } from '@/stores/entitlement'
 import * as settingActions from '@/stores/settingActions'
 import { confirmWorkAction } from './confirmation'
 import { capacitorExecution } from './execution-service'
@@ -83,6 +84,9 @@ export const capacitorDocumentParser: WorkDocumentParser = {
       }
     }
 
+    if (clientRestrictionsLifted()) {
+      throw new Error(String(i18n.t('No readable text was found in this file.')))
+    }
     const licenseKey = settingActions.getLicenseKey()
     if (!licenseKey)
       throw new Error(String(i18n.t('Sign in to Chatbox AI or activate a license to use cloud document parsing.')))

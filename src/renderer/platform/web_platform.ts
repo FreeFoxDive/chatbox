@@ -1,6 +1,7 @@
 import type { SessionRowStorePort } from '@chatbox/core/ports'
 import { type AnalyticsEventParams, GOOGLE_ANALYTICS_MEASUREMENT_ID } from '@shared/analytics'
 import * as defaults from '@shared/defaults'
+import { activeStorageKey, blobKeysForActiveWorkspace } from '@shared/workspace-namespace'
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
@@ -77,11 +78,10 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
     window.open(url)
   }
   public async getDeviceName(): Promise<string> {
-    // Web 平台返回浏览器名称
-    return await Promise.resolve(getBrowser()!)
+    return 'Chatbox Client'
   }
   public async getInstanceName(): Promise<string> {
-    return `${getOS()} / ${getBrowser()}`
+    return 'Chatbox Client'
   }
   public async getLocale() {
     const lang = window.navigator.language
@@ -115,19 +115,20 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   }
 
   public async getStoreBlob(key: string): Promise<string | null> {
-    return localforage.getItem<string>(key)
+    return localforage.getItem<string>(activeStorageKey(key))
   }
   public async setStoreBlob(key: string, value: string): Promise<void> {
-    await localforage.setItem(key, value)
+    await localforage.setItem(activeStorageKey(key), value)
   }
   public async delStoreBlob(key: string) {
-    return localforage.removeItem(key)
+    return localforage.removeItem(activeStorageKey(key))
   }
   public async listStoreBlobKeys(): Promise<string[]> {
-    return localforage.keys()
+    return blobKeysForActiveWorkspace(await localforage.keys())
   }
 
   public async initTracking() {
+    return
     const conf = await this.getConfig()
     window.gtag('config', GOOGLE_ANALYTICS_MEASUREMENT_ID, {
       app_name: 'chatbox',
@@ -140,6 +141,7 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
     })
   }
   public trackingEvent(name: string, params: AnalyticsEventParams) {
+    return
     window.gtag('event', name, params)
   }
 

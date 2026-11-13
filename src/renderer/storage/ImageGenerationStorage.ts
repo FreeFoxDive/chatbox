@@ -1,4 +1,5 @@
 import type { ImageGeneration, ImageGenerationPage } from '@shared/types'
+import { activeDatabaseName } from '@shared/workspace-namespace'
 import { reportDbOpenSucceeded, toDbOpenError, watchDbOpenBlocked, watchDbVersionChange } from './db-schema-guard'
 
 const PAGE_SIZE = 20
@@ -47,16 +48,17 @@ export class IndexedDBImageGenerationStorage implements ImageGenerationStorage {
 
   private openDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1)
-      watchDbOpenBlocked(DB_NAME, request)
+      const dbName = activeDatabaseName(DB_NAME)
+      const request = indexedDB.open(dbName, 1)
+      watchDbOpenBlocked(dbName, request)
 
-      request.onerror = () => reject(toDbOpenError(DB_NAME, request.error))
+      request.onerror = () => reject(toDbOpenError(dbName, request.error))
 
       request.onsuccess = () => {
         const db = request.result
         this.db = db
-        reportDbOpenSucceeded(DB_NAME)
-        watchDbVersionChange(DB_NAME, db, () => {
+        reportDbOpenSucceeded(dbName)
+        watchDbVersionChange(dbName, db, () => {
           if (this.db === db) {
             this.db = null
             this.initPromise = null

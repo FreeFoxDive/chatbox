@@ -5,6 +5,7 @@ import { LibSQLVector } from '@mastra/libsql'
 import { app } from 'electron'
 import { sentry } from '../adapters/sentry'
 import { getLogger } from '../util'
+import { workspaceDatabaseDir } from '../workspace-namespace-file'
 
 const log = getLogger('knowledge-base:db')
 
@@ -12,7 +13,7 @@ const log = getLogger('knowledge-base:db')
 // unlink files in that directory. Keep app-owned sqlite files in our own folder.
 const userDataPath = app.getPath('userData')
 const appDatabaseDir = path.join(userDataPath, 'chatbox-databases')
-const dbPath = path.join(appDatabaseDir, 'chatbox_kb.db')
+const dbPath = path.join(workspaceDatabaseDir(appDatabaseDir), 'chatbox_kb.db')
 
 // Ensure database directory exists
 const dbDir = path.dirname(dbPath)

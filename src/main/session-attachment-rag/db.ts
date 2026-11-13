@@ -8,13 +8,14 @@ import { planOrphanCleanup } from '../../shared/session-attachment-rag/ownership
 import type { SessionAttachmentOwnershipClaim } from '../../shared/types'
 import { sentry } from '../adapters/sentry'
 import { getLogger } from '../util'
+import { workspaceDatabaseDir } from '../workspace-namespace-file'
 
 const log = getLogger('session-attachment-rag:db')
 
 // Do not use `${userData}/databases`: Chromium/Electron profile storage may
 // unlink files in that directory. Keep app-owned sqlite files in our own folder.
 const userDataPath = app.getPath('userData')
-const appDatabaseDir = path.join(userDataPath, 'chatbox-databases')
+const appDatabaseDir = workspaceDatabaseDir(path.join(userDataPath, 'chatbox-databases'))
 const defaultDbPath = path.join(appDatabaseDir, 'chatbox_session_rag.db')
 const defaultVectorDbPath = path.join(appDatabaseDir, 'chatbox_session_rag_vectors.db')
 const dbPath = process.env.SESSION_ATTACHMENT_RAG_DB_PATH || defaultDbPath
