@@ -63,6 +63,7 @@ import platform from '@/platform'
 import { settingsStore, useLanguage, useProviderSettings, useSettingsStore } from '@/stores/settingsStore'
 import { add as addToast } from '@/stores/toastActions'
 import { type ModelTestState, testModelCapabilities } from '@/utils/model-tester'
+import { providerInputValue } from './-apiHostInput'
 import { showsNetworkCompatibility } from './-networkCompatibility'
 
 export const Route = createFileRoute('/settings/provider/$providerId')({
@@ -760,7 +761,8 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                     data-testid={TestId.settings.providerApiHost}
                     aria-label={t('API Host') ?? undefined}
                     disabled={isOAuthActive}
-                    value={providerSettings?.apiHost || baseInfo.defaultSettings?.apiHost || ''}
+                    value={providerInputValue(providerSettings?.apiHost, baseInfo.defaultSettings?.apiHost)}
+                    placeholder={baseInfo.defaultSettings?.apiHost}
                     onChange={handleApiHostChange}
                     inputMode="url"
                     autoCapitalize="none"
@@ -788,7 +790,7 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                       id={fieldId}
                       data-testid={TestId.settings.providerApiHost}
                       aria-label={t('API Host') ?? undefined}
-                      value={providerSettings?.apiHost}
+                      value={providerInputValue(providerSettings?.apiHost)}
                       placeholder={baseInfo.defaultSettings?.apiHost}
                       onChange={handleApiHostChange}
                       inputMode="url"
@@ -809,7 +811,7 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                       id={fieldId}
                       data-testid={TestId.settings.providerApiPath}
                       aria-label={t('API Path') ?? undefined}
-                      value={providerSettings?.apiPath}
+                      value={providerInputValue(providerSettings?.apiPath)}
                       onChange={handleApiPathChange}
                       placeholder={customApiHost.apiPath}
                     />
@@ -834,7 +836,7 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                       id={fieldId}
                       data-testid={TestId.settings.providerAzureEndpoint}
                       aria-label={t('Azure Endpoint') ?? undefined}
-                      value={providerSettings?.endpoint}
+                      value={providerInputValue(providerSettings?.endpoint)}
                       placeholder="https://<resource_name>.openai.azure.com/"
                       onChange={(e) =>
                         setProviderSettings({
@@ -857,7 +859,7 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                     id={fieldId}
                     data-testid={TestId.settings.providerAzureApiVersion}
                     aria-label={t('Azure API Version') ?? undefined}
-                    value={providerSettings?.apiVersion}
+                    value={providerInputValue(providerSettings?.apiVersion)}
                     placeholder="v1"
                     onChange={(e) =>
                       setProviderSettings({

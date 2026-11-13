@@ -19,7 +19,7 @@
     "delete-sourcemaps": "node scripts/delete-source-maps.mjs",
     "build:mobile:android": "cross-env CHATBOX_BUILD_TARGET=mobile_app CHATBOX_BUILD_PLATFORM=android CHATBOX_ELECTRON_VITE_TARGET=renderer electron-vite build && pnpm run delete-sourcemaps",
     "cap:sync:android": "pnpm run build:mobile:android && npx cap sync android",
-    "android:assets": "npx capacitor-assets generate --android",
+    "android:assets": "npx capacitor-assets generate --android --assetPath resources",
     "apk:debug": "pnpm run cap:sync:android && cd android && gradlew.bat assembleDebug",
     "apk:release": "pnpm run cap:sync:android && cd android && gradlew.bat assembleRelease",
     "postinstall": "node .erb/scripts/postinstall.cjs",

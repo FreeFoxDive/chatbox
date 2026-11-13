@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <circle cx="730" cy="270" r="30" fill="rgba(255,255,255,0.30)" stroke="rgba(255,255,255,0.82)" stroke-width="3"/>
+  <circle cx="742" cy="258" r="7" fill="rgba(255,255,255,0.9)"/>
+  <circle cx="330" cy="360" r="18" fill="rgba(255,255,255,0.24)" stroke="rgba(255,255,255,0.75)" stroke-width="2.5"/>
+  <circle cx="338" cy="352" r="4" fill="rgba(255,255,255,0.85)"/>
+  <circle cx="790" cy="500" r="13" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.7)" stroke-width="2"/>
+  <circle cx="300" cy="560" r="9" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.65)" stroke-width="2"/>
+  <ellipse cx="560" cy="760" rx="150" ry="14" fill="rgba(8,36,44,0.16)"/>
+  <path
+    d="M440 300H700A80 80 0 0 1 780 380V560A80 80 0 0 1 700 640H530L400 730L480 640H440A80 80 0 0 1 360 560V380A80 80 0 0 1 440 300Z"
+    fill="#F4E6C8"
+    stroke="#314048"
+    stroke-width="30"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+  <circle cx="510" cy="490" r="26" fill="#2A3338"/>
+  <circle cx="640" cy="490" r="26" fill="#2A3338"/>
+</svg>
