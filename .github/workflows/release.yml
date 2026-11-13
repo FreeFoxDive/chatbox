@@ -145,7 +145,7 @@ jobs:
           const fs = require('fs')
           const crypto = require('crypto')
           const path = require('path')
-          const version = require('./release/app/package.json').version
+          const version = require(path.join(process.cwd(), 'release/app/package.json')).version
           const exes = fs.readdirSync('release/build').filter((name) => name.endsWith('.exe'))
           if (exes.length !== 1) {
             console.error('Expected one Windows installer, found:', exes)
