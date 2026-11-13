@@ -1,18 +1,15 @@
 /**
  * beforePack hook for electron-builder.
  *
- * With pnpm's node-linker=hoisted, dependencies declared in
- * release/app/package.json get hoisted to the workspace root
- * node_modules/ instead of release/app/node_modules/.
- * electron-builder only packages release/app/node_modules/,
- * so transitive deps like detect-libc, node-fetch, zod end up
- * missing from the asar.
+ * release/app is its own pnpm workspace (see release/app/pnpm-workspace.yaml).
+ * electron-builder collects the packaged dependency tree with `pnpm list` in
+ * that directory. A parent-workspace install never records an importer for
+ * release/app, so that list is empty and runtime modules are dropped.
  *
- * This script runs `npm ci --omit=dev` in release/app/
- * to create a complete, flat node_modules/ before packaging,
- * then removes dev-only artifacts that shouldn't ship. It uses the effective
- * registry from the workspace root so local and CI installs follow the same
- * registry selection as the root pnpm install.
+ * This script installs production dependencies with the committed
+ * release/app/pnpm-lock.yaml, then removes type-only packages that should not
+ * ship. The registry comes from the workspace root .npmrc so local and CI
+ * installs resolve the same registry.
  */
 const { execSync } = require('child_process')
 const path = require('path')
@@ -24,16 +21,20 @@ exports.default = async function ensureAppDeps(context) {
   const projectDir = path.join(appDir, '..', '..')
   const nodeModulesDir = path.join(appDir, 'node_modules')
 
-  // Remove pnpm's incomplete hoisted node_modules if it exists
+  // Replace any node_modules left by a parent-workspace hoist or a previous npm ci.
   if (fs.existsSync(nodeModulesDir)) {
     fs.rmSync(nodeModulesDir, { recursive: true, force: true })
   }
 
   console.log('[ensure-app-deps] Installing production dependencies in release/app/ ...')
-  execSync('npm ci --omit=dev --ignore-scripts', {
+  execSync('pnpm install --prod --ignore-scripts --frozen-lockfile --config.engine-strict=false', {
     cwd: appDir,
     stdio: 'inherit',
-    env: { ...process.env, npm_config_registry: getProjectRegistry(projectDir) },
+    env: {
+      ...process.env,
+      npm_config_registry: getProjectRegistry(projectDir),
+      COREPACK_ENABLE_STRICT: '0',
+    },
   })
 
   verifyInstalledRuntimeDeps(appDir)
@@ -87,10 +88,9 @@ function getProjectRegistry(projectDir, options = {}) {
  * via "overrides" in release/app/package.json); this check makes any future
  * skew fail the build loudly instead of shipping a broken app.
  *
- * `pnpm list` runs after `npm ci` has replaced release/app/node_modules, so the
- * directory has no pnpm install metadata; `--lockfile-only` makes pnpm build
- * the tree from the lockfile instead of inspecting node_modules, which keeps
- * this check reliable regardless of the node_modules state.
+ * `--lockfile-only` reads release/app/pnpm-lock.yaml (this directory is its own
+ * workspace) instead of node_modules, so the comparison stays stable after the
+ * production install.
  *
  * Type-only packages (@types/*, undici-types) are excluded: they are removed
  * from disk before packaging and never needed at runtime.

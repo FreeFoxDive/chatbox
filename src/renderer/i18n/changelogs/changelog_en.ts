@@ -1,4 +1,9 @@
 const changelog = `
+## v1.24.5 - 2026.11.13
+1. Fixed a large splash image floating over the provider key field when pasting on Android
+2. Added a Windows installer to the GitHub release
+
+
 ## v1.24.4 - 2026.11.12
 1. Improved conversation scrolling and history loading, including position retention when switching branches or regenerating replies
 2. Unified the frosted glass appearance of popups and panels over chat wallpapers

@@ -1,0 +1,5 @@
+# Isolates release/app from the parent workspace. electron-builder collects
+# production dependencies with `pnpm list` in this directory, and the parent
+# lockfile has no importer for it, so the list is empty and the packaged app
+# misses runtime modules such as @anthropic-ai/sandbox-runtime.
+packages: []

@@ -719,6 +719,9 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                     value={providerSettings?.apiKey || ''}
                     onChange={handleApiKeyChange}
                     disabled={isOAuthActive}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                   <Tooltip
                     openOnTouch
@@ -885,6 +888,9 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                     aria-label={t('AWS Access Key ID') ?? undefined}
                     value={providerSettings?.accessKey || ''}
                     placeholder="AKIAIOSFODNN7EXAMPLE"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     onChange={(e) =>
                       setProviderSettings({
                         accessKey: e.currentTarget.value,
@@ -903,6 +909,9 @@ function ProviderSettings({ providerId }: { providerId: string }) {
                     aria-label={t('AWS Secret Access Key') ?? undefined}
                     value={providerSettings?.secretKey || ''}
                     placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     onChange={(e) =>
                       setProviderSettings({
                         secretKey: e.currentTarget.value,
