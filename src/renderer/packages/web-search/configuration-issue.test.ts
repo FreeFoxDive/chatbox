@@ -17,6 +17,17 @@ describe('getWebSearchConfigurationIssue', () => {
     expect(getWebSearchConfigurationIssue({ provider: 'deepseek', deepseekApiKey: '  ' })).toBe('deepseek-api-key')
     expect(getWebSearchConfigurationIssue({ provider: 'deepseek', deepseekApiKey: 'search-key' })).toBeNull()
     expect(getWebSearchConfigurationIssue({ provider: 'deepseek', deepseekProviderApiKey: 'provider-key' })).toBeNull()
+    expect(getWebSearchConfigurationIssue({ provider: 'searxng-deepseek' })).toBe('searxng-instance')
+    expect(
+      getWebSearchConfigurationIssue({ provider: 'searxng-deepseek', searxngBaseUrl: 'https://searx.example.com' })
+    ).toBe('deepseek-api-key')
+    expect(
+      getWebSearchConfigurationIssue({
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx.example.com',
+        deepseekProviderApiKey: 'provider-key',
+      })
+    ).toBeNull()
   })
 
   it('prefers a dedicated DeepSeek search key over the model provider key', () => {

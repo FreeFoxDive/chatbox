@@ -1,37 +1,13 @@
+import { mapSearxngPayload } from '@shared/services/native-web-search'
 import type { SearchResult } from '@shared/types'
 import WebSearch from './base'
-
-type SearxngResult = {
-  title?: unknown
-  url?: unknown
-  content?: unknown
-  snippet?: unknown
-}
-
-type SearxngResponse = {
-  results: unknown[]
-}
 
 export function normalizeSearxngBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, '')
 }
 
-function toNonEmptyString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function isSearxngResult(value: unknown): value is SearxngResult {
-  return typeof value === 'object' && value !== null
-}
-
-function isSearxngResponse(value: unknown): value is SearxngResponse {
-  if (typeof value !== 'object' || value === null || !('results' in value)) {
-    return false
-  }
-  return Array.isArray(value.results)
-}
-
 export class SearxngSearch extends WebSearch {
+  override sourceLabel = 'SearXNG'
   private readonly baseUrl: string
 
   constructor(baseUrl: string) {
@@ -53,27 +29,7 @@ export class SearxngSearch extends WebSearch {
         responseType: 'json',
         signal,
       })
-
-      if (!isSearxngResponse(response)) {
-        throw new Error('SearXNG returned an invalid JSON search response')
-      }
-
-      const results = response.results
-      const items = results
-        .filter(isSearxngResult)
-        .map((result) => {
-          const title = toNonEmptyString(result.title)
-          const link = toNonEmptyString(result.url)
-          if (!title || !link) return null
-          return {
-            title,
-            link,
-            snippet: toNonEmptyString(result.content) ?? toNonEmptyString(result.snippet) ?? '',
-          }
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-
-      return { items }
+      return { items: mapSearxngPayload(response) }
     } catch (error) {
       console.error('SearXNG search error:', error)
       throw error

@@ -18,7 +18,15 @@ export interface NativeWebSearchResultItem {
 }
 
 /** Same provider set the renderer's Web Search settings expose. */
-export type NativeWebSearchProvider = 'build-in' | 'bing' | 'tavily' | 'bocha' | 'querit' | 'searxng' | 'deepseek'
+export type NativeWebSearchProvider =
+  | 'build-in'
+  | 'bing'
+  | 'tavily'
+  | 'bocha'
+  | 'querit'
+  | 'searxng'
+  | 'deepseek'
+  | 'searxng-deepseek'
 
 export const nativeWebSearchProviderOptions: Array<{ id: NativeWebSearchProvider; label: string }> = [
   { id: 'build-in', label: 'Chatbox AI' },
@@ -28,6 +36,7 @@ export const nativeWebSearchProviderOptions: Array<{ id: NativeWebSearchProvider
   { id: 'querit', label: 'Querit' },
   { id: 'searxng', label: 'SearXNG' },
   { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'searxng-deepseek', label: 'SearXNG + DeepSeek' },
 ]
 
 export interface NativeWebSearchSettings {
@@ -99,6 +108,9 @@ export function hasNativeWebSearchConfiguration(
   settings: Pick<NativeWebSearchSettings, 'provider' | 'apiKey'> & Partial<Pick<NativeWebSearchSettings, 'apiHost'>>,
   licenseKey?: string
 ): boolean {
+  if (settings.provider === 'searxng-deepseek') {
+    return Boolean(settings.apiKey.trim() && settings.apiHost?.trim())
+  }
   if (
     settings.provider === 'tavily' ||
     settings.provider === 'bocha' ||
@@ -123,6 +135,7 @@ export async function searchNativeWeb(
   if (provider === 'querit') return searchNativeQuerit(query, options)
   if (provider === 'searxng') return searchNativeSearxng(query, options)
   if (provider === 'deepseek') return searchNativeDeepSeek(query, options)
+  if (provider === 'searxng-deepseek') return searchNativeSearxngDeepSeek(query, options)
   return searchNativeTavily(query, options)
 }
 
@@ -135,6 +148,214 @@ interface SearxngResponseItem {
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+const TRACKING_QUERY_PARAMS = new Set(['fbclid', 'gclid', 'spm'])
+
+/** Identity used to merge the same page without collapsing different query strings. */
+export function normalizeResultUrl(raw: string): string {
+  try {
+    const url = new URL(raw.trim())
+    url.hash = ''
+    url.hostname = url.hostname.toLowerCase()
+    const kept = [...url.searchParams.entries()]
+      .filter(([key]) => {
+        const name = key.toLowerCase()
+        return !name.startsWith('utm_') && !name.startsWith('spm.') && !TRACKING_QUERY_PARAMS.has(name)
+      })
+      .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]))
+    url.search = ''
+    for (const [key, value] of kept) url.searchParams.append(key, value)
+    return url.toString()
+  } catch {
+    return raw.trim()
+  }
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  const omission = '...'
+  if (maxLength <= omission.length) return omission.slice(0, maxLength)
+  return value.slice(0, maxLength - omission.length) + omission
+}
+
+function richerSnippet(current: string, incoming: string): string {
+  const next = incoming.trim()
+  if (!next) return current
+  if (!current) return next
+  if (current.toLowerCase().includes(next.toLowerCase())) return current
+  if (next.toLowerCase().includes(current.toLowerCase())) return next
+  return current.length >= next.length ? current : next
+}
+
+function sourceRank(source: string): number {
+  if (source === 'DeepSeek') return 0
+  if (source === 'SearXNG') return 1
+  return 2
+}
+
+function composeSnippets(snippets: Map<string, string>): { text: string; merged: boolean } {
+  const entries = [...snippets.entries()]
+    .map(([source, text]) => ({ source, text: text.trim() }))
+    .filter((entry) => entry.text)
+    .sort((a, b) => sourceRank(a.source) - sourceRank(b.source))
+  if (entries.length === 0) return { text: '', merged: false }
+
+  const kept: Array<{ source: string; text: string }> = []
+  for (const entry of entries) {
+    if (kept.some((item) => item.text.toLowerCase().includes(entry.text.toLowerCase()))) continue
+    const contained = kept.findIndex((item) => entry.text.toLowerCase().includes(item.text.toLowerCase()))
+    if (contained >= 0 && kept.length === 1) {
+      kept[0] = entry
+      continue
+    }
+    kept.push(entry)
+  }
+
+  if (kept.length === 1) return { text: kept[0].text, merged: entries.length > 1 }
+  return {
+    text: kept
+      .map((item) => (item.source.startsWith('__group_') ? item.text : `[${item.source}]\n${item.text}`))
+      .join('\n\n'),
+    merged: true,
+  }
+}
+
+export interface SearchResultGroup {
+  items: NativeWebSearchResultItem[]
+  source?: string
+}
+
+/**
+ * Round-robin merge that keeps both summaries when the same page was described differently.
+ * Tracking parameters and hashes are ignored; other query parameters stay distinct.
+ */
+export function mergeSearchResults(
+  groups: SearchResultGroup[],
+  options?: { maxItems?: number; snippetLength?: number; mergedSnippetLength?: number }
+): NativeWebSearchResultItem[] {
+  const maxItems = options?.maxItems ?? (groups.length > 1 ? 16 : 10)
+  const snippetLength = options?.snippetLength ?? 800
+  const mergedSnippetLength = options?.mergedSnippetLength ?? 1200
+  type Bucket = { title: string; link: string; rank: number; snippets: Map<string, string> }
+  const buckets = new Map<string, Bucket>()
+  let rank = 0
+  let index = 0
+
+  while (true) {
+    let found = false
+    groups.forEach((group, groupIndex) => {
+      const item = group.items[index]
+      if (!item) return
+      found = true
+      const link = item.link.trim()
+      const title = item.title.trim()
+      const snippet = item.snippet.trim()
+      if (!link && !title && !snippet) return
+      const source = group.source || `__group_${groupIndex}`
+      const key = link ? normalizeResultUrl(link) : `nolink:${source}:${title}:${snippet}`
+      const existing = buckets.get(key)
+      if (!existing) {
+        const snippets = new Map<string, string>()
+        if (snippet) snippets.set(source, snippet)
+        buckets.set(key, { title, link, rank: rank++, snippets })
+        return
+      }
+      if (!existing.title && title) existing.title = title
+      if (snippet) existing.snippets.set(source, richerSnippet(existing.snippets.get(source) ?? '', snippet))
+    })
+    if (!found) break
+    index++
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, maxItems)
+    .map((bucket) => {
+      const snippet = composeSnippets(bucket.snippets)
+      return {
+        title: bucket.title,
+        link: bucket.link,
+        snippet: truncateText(snippet.text, snippet.merged ? mergedSnippetLength : snippetLength),
+      }
+    })
+}
+
+function firstUrl(value: unknown): string | null {
+  if (!Array.isArray(value)) return null
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry.trim()) return entry.trim()
+    if (typeof entry === 'object' && entry !== null) {
+      const url = nonEmptyString((entry as { url?: unknown }).url)
+      if (url) return url
+    }
+  }
+  return null
+}
+
+function infoboxSnippet(content: unknown, attributes: unknown): string {
+  const body = nonEmptyString(content) ?? ''
+  const rows = Array.isArray(attributes)
+    ? attributes
+        .map((attribute) => {
+          if (typeof attribute !== 'object' || attribute === null) return null
+          const label = nonEmptyString((attribute as { label?: unknown }).label)
+          const value = nonEmptyString((attribute as { value?: unknown }).value)
+          if (!label || !value) return null
+          return `${label}: ${value}`
+        })
+        .filter((row): row is string => row !== null)
+    : []
+  return [body, ...rows].filter(Boolean).join('\n')
+}
+
+/** Maps a SearXNG JSON payload, including direct answers and infoboxes ahead of links. */
+export function mapSearxngPayload(payload: unknown): NativeWebSearchResultItem[] {
+  if (typeof payload !== 'object' || payload === null || !('results' in payload)) {
+    throw new Error('SearXNG returned an invalid JSON search response')
+  }
+  const record = payload as { results?: unknown; answers?: unknown; infoboxes?: unknown }
+  if (!Array.isArray(record.results)) throw new Error('SearXNG returned an invalid JSON search response')
+
+  const items: NativeWebSearchResultItem[] = []
+  if (Array.isArray(record.answers)) {
+    for (const answer of record.answers) {
+      const text =
+        typeof answer === 'string'
+          ? answer.trim()
+          : typeof answer === 'object' && answer !== null
+            ? nonEmptyString((answer as { answer?: unknown }).answer)
+            : null
+      if (!text) continue
+      const link =
+        typeof answer === 'object' && answer !== null ? (nonEmptyString((answer as { url?: unknown }).url) ?? '') : ''
+      items.push({ title: 'Answer', link, snippet: text })
+    }
+  }
+  if (Array.isArray(record.infoboxes)) {
+    for (const box of record.infoboxes) {
+      if (typeof box !== 'object' || box === null) continue
+      const info = box as { title?: unknown; content?: unknown; urls?: unknown; attributes?: unknown }
+      const snippet = infoboxSnippet(info.content, info.attributes)
+      const link = firstUrl(info.urls) ?? ''
+      if (!snippet && !link) continue
+      items.push({ title: nonEmptyString(info.title) ?? 'Infobox', link, snippet })
+    }
+  }
+
+  for (const item of record.results) {
+    if (typeof item !== 'object' || item === null) continue
+    const result = item as SearxngResponseItem
+    const title = nonEmptyString(result.title)
+    const link = nonEmptyString(result.url)
+    if (!title || !link) continue
+    items.push({
+      title,
+      link,
+      snippet: nonEmptyString(result.content) ?? nonEmptyString(result.snippet) ?? '',
+    })
+  }
+  return items
 }
 
 async function searchNativeSearxng(
@@ -152,21 +373,29 @@ async function searchNativeSearxng(
   } as NativeFetchInit)
   if (!response.ok) throw new Error(`SearXNG search failed with status ${response.status}`)
 
-  const payload = (await response.json()) as { results?: unknown }
-  if (!Array.isArray(payload.results)) throw new Error('SearXNG returned an invalid JSON search response')
-  return payload.results
-    .filter((item): item is SearxngResponseItem => typeof item === 'object' && item !== null)
-    .map((item) => {
-      const title = nonEmptyString(item.title)
-      const link = nonEmptyString(item.url)
-      if (!title || !link) return null
-      return {
-        title,
-        link,
-        snippet: nonEmptyString(item.content) ?? nonEmptyString(item.snippet) ?? '',
-      }
-    })
-    .filter((item): item is NativeWebSearchResultItem => item !== null)
+  return mapSearxngPayload(await response.json())
+}
+
+async function searchNativeSearxngDeepSeek(
+  query: string,
+  options: NativeWebSearchOptions
+): Promise<NativeWebSearchResultItem[]> {
+  const [searxng, deepseek] = await Promise.all([
+    searchNativeSearxng(query, options)
+      .then((items) => ({ items, source: 'SearXNG' as const }))
+      .catch((error: unknown) => ({ error })),
+    searchNativeDeepSeek(query, { ...options, apiHost: undefined })
+      .then((items) => ({ items, source: 'DeepSeek' as const }))
+      .catch((error: unknown) => ({ error })),
+  ])
+  const groups: SearchResultGroup[] = []
+  if ('items' in searxng) groups.push(searxng)
+  if ('items' in deepseek) groups.push(deepseek)
+  if (groups.length === 0) {
+    const failure = 'error' in searxng ? searxng.error : 'error' in deepseek ? deepseek.error : undefined
+    throw failure instanceof Error ? failure : new Error('Web search failed')
+  }
+  return mergeSearchResults(groups, { maxItems: 16, snippetLength: 800, mergedSnippetLength: 1200 })
 }
 
 interface DeepSeekSearchResult {

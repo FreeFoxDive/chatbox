@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { formatNativeWebSearchContext, hasNativeWebSearchConfiguration, searchNativeWeb } from './native-web-search'
+import {
+  formatNativeWebSearchContext,
+  hasNativeWebSearchConfiguration,
+  mergeSearchResults,
+  searchNativeWeb,
+} from './native-web-search'
 
 function mockFetchResponse(body: unknown, ok = true, status = 200) {
   return vi.fn(async () => ({
@@ -24,6 +29,17 @@ describe('native web search', () => {
     expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: '' })).toBe(false)
     expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: '  ' })).toBe(false)
     expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: 'sk-key' })).toBe(true)
+    expect(hasNativeWebSearchConfiguration({ provider: 'searxng-deepseek', apiKey: 'sk-key', apiHost: '' })).toBe(false)
+    expect(
+      hasNativeWebSearchConfiguration({ provider: 'searxng-deepseek', apiKey: '', apiHost: 'https://searx.test' })
+    ).toBe(false)
+    expect(
+      hasNativeWebSearchConfiguration({
+        provider: 'searxng-deepseek',
+        apiKey: 'sk-key',
+        apiHost: 'https://searx.test',
+      })
+    ).toBe(true)
   })
 
   it('searches through the chatbox build-in endpoint with the license key and injected headers', async () => {
@@ -178,6 +194,87 @@ describe('native web search', () => {
       })
     ).resolves.toEqual([])
     expect(unusedFetch).not.toHaveBeenCalled()
+  })
+
+  it('searches SearXNG and DeepSeek together and keeps a result when one side fails', async () => {
+    const fetchFn = vi.fn((url: string) => {
+      if (String(url).startsWith('https://searx.test/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              answers: ['18°C'],
+              results: [{ title: 'Forecast', url: 'https://weather.example/page?id=1', content: 'weekly' }],
+            }),
+        }
+      }
+      return {
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: { message: 'blocked by policy' } }),
+      }
+    }) as unknown as typeof fetch
+
+    const items = await searchNativeWeb('上海 天气', {
+      provider: 'searxng-deepseek',
+      apiKey: 'sk-key',
+      apiHost: 'https://searx.test',
+      fetchFn,
+    })
+
+    expect(items.map((item) => item.title)).toEqual(['Answer', 'Forecast'])
+    expect(items[0]?.snippet).toBe('18°C')
+
+    const failingSearx = vi.fn((url: string) => {
+      if (String(url).startsWith('https://searx.test/')) {
+        return { ok: false, status: 500, json: () => Promise.resolve({}) }
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            results: [{ title: 'DeepSeek weather', url: 'https://weather.example/deep', summary: '18°C today' }],
+          }),
+      }
+    }) as unknown as typeof fetch
+    const fallback = await searchNativeWeb('上海 天气', {
+      provider: 'searxng-deepseek',
+      apiKey: 'sk-key',
+      apiHost: 'https://searx.test',
+      fetchFn: failingSearx,
+    })
+    expect(fallback).toEqual([
+      { title: 'DeepSeek weather', link: 'https://weather.example/deep', snippet: '18°C today' },
+    ])
+  })
+
+  it('merges different summaries for the same page without collapsing different queries', () => {
+    const merged = mergeSearchResults([
+      {
+        source: 'SearXNG',
+        items: [
+          { title: 'Guide', link: 'https://Example.com/a?id=1&utm_source=newsletter#top', snippet: 'original hit' },
+        ],
+      },
+      {
+        source: 'DeepSeek',
+        items: [{ title: '', link: 'https://example.com/a?id=1', snippet: 'A longer rewritten summary.' }],
+      },
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.link).toBe('https://Example.com/a?id=1&utm_source=newsletter#top')
+    expect(merged[0]?.title).toBe('Guide')
+    expect(merged[0]?.snippet).toContain('[DeepSeek]')
+    expect(merged[0]?.snippet).toContain('[SearXNG]')
+    expect(merged[0]?.snippet).toContain('original hit')
+
+    const distinct = mergeSearchResults([
+      { source: 'SearXNG', items: [{ title: 'One', link: 'https://example.com/a?id=1', snippet: 'one' }] },
+      { source: 'DeepSeek', items: [{ title: 'Two', link: 'https://example.com/a?id=2', snippet: 'two' }] },
+    ])
+    expect(distinct).toHaveLength(2)
   })
 
   it('surfaces a DeepSeek error payload even when the transport reports success', async () => {

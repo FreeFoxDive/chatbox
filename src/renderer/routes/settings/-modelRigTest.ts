@@ -151,8 +151,23 @@ async function testSearchSlot(deps: ModelRigTestDeps): Promise<SlotTestResult> {
   if (provider === 'querit' && !deps.settings.extension?.webSearch?.queritApiKey) {
     return fail('Querit API key is missing', 'Add a Querit API key in Web Search settings.')
   }
-  if (provider === 'searxng' && !deps.settings.extension?.webSearch?.searxngBaseUrl?.trim()) {
+  if (
+    (provider === 'searxng' || provider === 'searxng-deepseek') &&
+    !deps.settings.extension?.webSearch?.searxngBaseUrl?.trim()
+  ) {
     return fail('SearXNG URL is missing', 'Add a SearXNG instance URL in Web Search settings.')
+  }
+  if (
+    provider === 'searxng-deepseek' &&
+    !resolveDeepSeekWebSearchApiKey(
+      deps.settings.extension?.webSearch?.deepseekApiKey,
+      deps.settings.providers?.[ModelProviderEnum.DeepSeek]?.apiKey
+    )
+  ) {
+    return fail(
+      'DeepSeek API key is missing',
+      'Add a DeepSeek API key in Web Search settings, or in the DeepSeek model provider.'
+    )
   }
   if (
     provider === 'deepseek' &&

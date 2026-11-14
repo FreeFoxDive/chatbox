@@ -1,6 +1,6 @@
 import { cachified } from '@epic-web/cachified'
+import { mergeSearchResults } from '@shared/services/native-web-search'
 import type { SearchResultItem } from '@shared/types'
-import { truncate } from 'lodash'
 import platform from '@/platform'
 import { getDeepSeekProviderApiKey, getExtensionSettings, getLanguage, getLicenseKey } from '@/stores/settingActions'
 import { ChatboxAIAPIError } from '../../../shared/models/errors'
@@ -16,7 +16,9 @@ import { normalizeSearxngBaseUrl, SearxngSearch } from './searxng'
 import { TavilySearch } from './tavily'
 
 const MAX_CONTEXT_ITEMS = 10
+const MAX_HYBRID_CONTEXT_ITEMS = 16
 const MAX_SNIPPET_LENGTH = 800
+const MAX_MERGED_SNIPPET_LENGTH = 1200
 
 // 根据配置的搜索提供方来选择搜索服务
 function getSearchProviders() {
@@ -83,6 +85,18 @@ function getSearchProviders() {
       selectedProviders.push(new DeepSeekSearch(apiKey))
       break
     }
+    case 'searxng-deepseek': {
+      const searxngBaseUrl = normalizeSearxngBaseUrl(settings.webSearch.searxngBaseUrl ?? '')
+      if (!searxngBaseUrl) {
+        throw ChatboxAIAPIError.fromCodeName('searxng_base_url_required', 'searxng_base_url_required')
+      }
+      const apiKey = resolveDeepSeekWebSearchApiKey(settings.webSearch.deepseekApiKey, getDeepSeekProviderApiKey())
+      if (!apiKey) {
+        throw ChatboxAIAPIError.fromCodeName('deepseek_api_key_required', 'deepseek_api_key_required')
+      }
+      selectedProviders.push(new SearxngSearch(searxngBaseUrl), new DeepSeekSearch(apiKey))
+      break
+    }
     default:
       throw new Error(`Unsupported search provider: ${provider}`)
   }
@@ -97,7 +111,7 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
       try {
         const result = await provider.search(query, signal)
         console.debug(`web search result for "${query}":`, result.items)
-        return { result }
+        return { result, source: provider.sourceLabel }
       } catch (err) {
         console.error(err)
         return { error: err }
@@ -105,36 +119,22 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
     })
   )
 
-  const successfulResults = results.flatMap((entry) => (entry.result ? [entry.result] : []))
+  const successfulResults = results.flatMap((entry) => (entry.result ? [entry] : []))
   if (successfulResults.length === 0) {
     throw results[0]?.error ?? new Error('Web search failed')
   }
 
-  const items: SearchResultItem[] = []
-
-  // add items in turn
-  let i = 0
-  let hasMore = false
-  do {
-    hasMore = false
-    for (const result of successfulResults) {
-      const item = result.items[i]
-      if (item) {
-        hasMore = true
-        items.push(item)
-      } else {
-      }
+  const items: SearchResultItem[] = mergeSearchResults(
+    successfulResults.map((entry) => ({ items: entry.result.items, source: entry.source || undefined })),
+    {
+      maxItems: successfulResults.length > 1 ? MAX_HYBRID_CONTEXT_ITEMS : MAX_CONTEXT_ITEMS,
+      snippetLength: MAX_SNIPPET_LENGTH,
+      mergedSnippetLength: MAX_MERGED_SNIPPET_LENGTH,
     }
-    i++
-  } while (hasMore && items.length < MAX_CONTEXT_ITEMS)
+  )
 
   console.debug('web search items', items)
-
-  return items.map((item) => ({
-    title: item.title,
-    snippet: truncate(item.snippet, { length: MAX_SNIPPET_LENGTH }),
-    link: item.link,
-  }))
+  return items
 }
 
 export async function testWebSearchConnection(signal?: AbortSignal): Promise<void> {
@@ -149,8 +149,17 @@ export const webSearchExecutor = async (
 ) => {
   const webSearch = getExtensionSettings().webSearch
   const provider = webSearch.provider
+  const searxngBaseUrl = normalizeSearxngBaseUrl(webSearch.searxngBaseUrl ?? '')
   const cacheIdentity =
-    provider === 'searxng' ? `${provider}:${normalizeSearxngBaseUrl(webSearch.searxngBaseUrl ?? '')}` : provider
+    provider === 'searxng'
+      ? `${provider}:${searxngBaseUrl}`
+      : provider === 'searxng-deepseek'
+        ? `${provider}:${searxngBaseUrl}:${
+            resolveDeepSeekWebSearchApiKey(webSearch.deepseekApiKey, getDeepSeekProviderApiKey())
+              ? 'deepseek'
+              : 'no-deepseek'
+          }`
+        : provider
   const searchResults = await cachified({
     cache,
     key: `search-context:${cacheIdentity}:${query}`,
@@ -164,7 +173,12 @@ export const webSearchExecutor = async (
  * Single source of truth: which configured providers offer the parse_link tool.
  * Keep in sync with the provider classes' `supportsParseLink` flags.
  */
-export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily', 'deepseek'])
+export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set([
+  'build-in',
+  'tavily',
+  'deepseek',
+  'searxng-deepseek',
+])
 
 /**
  * Returns the first configured search provider that supports parseLink.

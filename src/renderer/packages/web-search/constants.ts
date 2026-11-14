@@ -6,6 +6,7 @@ export const WEB_SEARCH_PROVIDERS = [
   { value: 'querit', label: 'Querit' },
   { value: 'searxng', label: 'SearXNG' },
   { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'searxng-deepseek', label: 'SearXNG + DeepSeek' },
 ] as const
 
 export type WebSearchProviderValue = (typeof WEB_SEARCH_PROVIDERS)[number]['value']

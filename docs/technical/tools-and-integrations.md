@@ -77,7 +77,8 @@ Web Search 采用抽象基类模式（`src/renderer/packages/web-search/base.ts`
 | BoCha | `bocha.ts` | ✓ | ✗ | 国内搜索 API |
 | Querit | `querit.ts` | ✓ | ✗ | 多源聚合搜索 |
 | SearXNG | `searxng.ts` | ✓ | ✗ | 自建元搜索实例，需开启 JSON 输出 |
-| DeepSeek | `deepseek.ts` | ✓ | ✓（调用 `/v1/tools/fetch`） | 官方搜索与抓取，需 DeepSeek API Key，可复用模型提供方密钥 |
+| DeepSeek | `deepseek.ts` | ✓ | ✓（调用 `/v1/tools/fetch`，失败后本地直连提取） | 官方搜索与抓取，需 DeepSeek API Key，可复用模型提供方密钥 |
+| SearXNG + DeepSeek | `searxng.ts` + `deepseek.ts` | ✓ | ✓（DeepSeek 抓取，失败后本地直连提取） | 两边并行搜索；同一页面保留不同摘要；任一侧失败时仍使用另一侧 |
 
 每个供应商通过 `supportsParseLink` 实例标志声明自己是否实现了 `parseLink`。基类默认返回 `false`，需要的子类用 `override supportsParseLink = true` 显式声明。
 
@@ -94,9 +95,9 @@ Web Search 采用抽象基类模式（`src/renderer/packages/web-search/base.ts`
 搜索入口（`src/renderer/packages/web-search/index.ts`）实现了以下设计：
 
 1. **供应商选择**：根据用户设置（`extensionSettings.webSearch.provider`）动态实例化搜索供应商
-2. **并行搜索**：同时调用所有选中的供应商，结果交替合并（round-robin），确保多源覆盖
-3. **结果缓存**：使用 5 分钟 TTL 缓存（`cachified`），避免重复搜索相同查询
-4. **结果截断**：最多返回 10 条结果，每条摘要截断至 800 字符，以保留 DeepSeek 等提供方为模型准备的长摘要（天气、新闻等实时事实通常出现在摘要后半段）
+2. **并行搜索**：同时调用所有选中的供应商。单一供应商最多保留 10 条；多个供应商按轮询顺序合并，同一页面（忽略 hash 与 `utm_*`/`fbclid`/`gclid`/`spm` 等追踪参数，保留其余 query）合并双边摘要，最多保留 16 条。任一侧失败时仍返回另一侧结果
+3. **结果缓存**：使用 5 分钟 TTL 缓存（`cachified`），避免重复搜索相同查询。SearXNG 与组合搜索的缓存键包含规范化后的实例地址；组合搜索还包含 DeepSeek 密钥是否已配置
+4. **结果截断**：单一来源摘要截断至 800 字符；合并了两边不同摘要的条目截断至 1200 字符，以保留 DeepSeek 长摘要和 SearXNG 原文片段
 
 ## Tool 系统（内置工具集）
 
@@ -142,7 +143,7 @@ Web Search 采用抽象基类模式（`src/renderer/packages/web-search/base.ts`
 |--------|---------|---------|
 | `build-in` (Chatbox AI) | 检查 `licenseKey` → 调用 `remote.parseUserLinkPro` | 缺 license 抛 `chatbox_search_license_key_required`（后端不限制 tier，任意 license 均可调用） |
 | `tavily` | `getParseLinkProvider().parseLink()` → Tavily `/extract` API | 缺 API key 抛 `tavily_api_key_required`；提取空抛 `parse_link_failed` |
-| `deepseek` | `getParseLinkProvider().parseLink()` → DeepSeek `/v1/tools/fetch` | 缺 API key（且模型提供方也未配置）抛 `deepseek_api_key_required`；抓取空抛 `parse_link_failed` |
+| `deepseek` / `searxng-deepseek` | `getParseLinkProvider().parseLink()` → DeepSeek `/v1/tools/fetch`，失败或空正文后由客户端直接抓取并用 Readability 提取 | 缺 SearXNG 地址抛 `searxng_base_url_required`；缺 API key（且模型提供方也未配置）抛 `deepseek_api_key_required`；两边都失败抛 `parse_link_failed` |
 | 其他（`bing` / `bocha` / `querit` / `searxng`） | 不会注入 `parse_link`，模型看不到此工具 | — |
 
 错误抛出采用 AI/用户双层结构：`Error.message`（传给 `ChatboxAIAPIError` 构造器的第一参数）携带技术原因供 AI 推理（例如 "Tavily extract API returned no results for {url}"），`detail.i18nKey` 则给用户渲染本地化的友好提示。

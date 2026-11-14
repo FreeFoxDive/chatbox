@@ -44,10 +44,20 @@ vi.mock('./searxng', async (importOriginal) => {
   return {
     ...actual,
     SearxngSearch: class {
+      sourceLabel = 'SearXNG'
       constructor(private readonly baseUrl: string) {}
-      search = vi.fn().mockImplementation(async () => ({
-        items: [{ title: `SearXNG Result ${this.baseUrl}`, snippet: 'test', link: 'https://example.com' }],
-      }))
+      search = vi.fn().mockImplementation((query: string) => {
+        if (query === 'searxng-down' || query === 'both-down') throw new Error('SearXNG unavailable')
+        return {
+          items: [
+            {
+              title: `SearXNG Result ${this.baseUrl}`,
+              snippet: 'searx snippet',
+              link: 'https://example.com/shared?id=1',
+            },
+          ],
+        }
+      })
     },
   }
 })
@@ -55,16 +65,21 @@ vi.mock('./searxng', async (importOriginal) => {
 vi.mock('./deepseek', () => {
   return {
     DeepSeekSearch: class {
+      sourceLabel = 'DeepSeek'
+      supportsParseLink = true
       constructor(private readonly apiKey: string) {}
-      search = vi.fn().mockImplementation(() => ({
-        items: [
-          {
-            title: `DeepSeek Result ${this.apiKey}`,
-            snippet: 'x'.repeat(900),
-            link: 'https://example.com',
-          },
-        ],
-      }))
+      search = vi.fn().mockImplementation((query: string) => {
+        if (query === 'deepseek-down' || query === 'both-down') throw new Error('DeepSeek unavailable')
+        return {
+          items: [
+            {
+              title: `DeepSeek Result ${this.apiKey}`,
+              snippet: 'x'.repeat(900),
+              link: 'https://example.com/shared?id=1&utm_source=ad',
+            },
+          ],
+        }
+      })
     },
   }
 })
@@ -79,8 +94,9 @@ vi.mock('./chatbox-search', () => {
   }
 })
 
+import { mergeSearchResults } from '@shared/services/native-web-search'
 import { getDeepSeekProviderApiKey, getExtensionSettings } from '@/stores/settingActions'
-import { testWebSearchConnection, webSearchExecutor } from './index'
+import { getParseLinkProvider, testWebSearchConnection, webSearchExecutor } from './index'
 
 const mockGetExtensionSettings = vi.mocked(getExtensionSettings)
 const mockGetDeepSeekProviderApiKey = vi.mocked(getDeepSeekProviderApiKey)
@@ -217,6 +233,143 @@ describe('webSearchExecutor', () => {
     expect(result.searchResults[0].snippet).toHaveLength(800)
     expect(result.searchResults[0].snippet.endsWith('...')).toBe(true)
     expect(result.searchResults[0].snippet.startsWith('x')).toBe(true)
+  })
+
+  it('merges SearXNG and DeepSeek summaries for the same page', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const result = await webSearchExecutor({ query: 'hybrid shared page' }, {})
+
+    expect(result.searchResults).toHaveLength(1)
+    expect(result.searchResults[0].title).toBe('SearXNG Result https://searx.example.com')
+    expect(result.searchResults[0].snippet).toContain('[DeepSeek]')
+    expect(result.searchResults[0].snippet).toContain('[SearXNG]')
+    expect(result.searchResults[0].snippet).toContain('searx snippet')
+    expect(result.searchResults[0].link).toBe('https://example.com/shared?id=1')
+  })
+
+  it('reads pages through DeepSeek when both providers are configured', () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const provider = getParseLinkProvider()
+
+    expect(provider?.supportsParseLink).toBe(true)
+    expect(provider?.sourceLabel).toBe('DeepSeek')
+  })
+
+  it('requires the SearXNG instance before reading a page for the combined provider', () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: { provider: 'searxng-deepseek', searxngBaseUrl: '  ', deepseekApiKey: 'search-key' },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    expect(() => getParseLinkProvider()).toThrow(expect.objectContaining({ code: 20036 }))
+  })
+
+  it('keeps the other side when SearXNG fails', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const result = await webSearchExecutor({ query: 'searxng-down' }, {})
+
+    expect(result.searchResults).toHaveLength(1)
+    expect(result.searchResults[0].title).toBe('DeepSeek Result search-key')
+  })
+
+  it('rejects the hybrid search when both sides fail', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    await expect(webSearchExecutor({ query: 'both-down' }, {})).rejects.toThrow('SearXNG unavailable')
+  })
+
+  it('does not reuse a hybrid result after the SearXNG instance or DeepSeek key readiness changes', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx-a.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+    const first = await webSearchExecutor({ query: 'hybrid cache' }, {})
+    expect(first.searchResults[0].title).toBe('SearXNG Result https://searx-a.example.com')
+
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx-b.example.com',
+        deepseekApiKey: 'search-key',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+    const second = await webSearchExecutor({ query: 'hybrid cache' }, {})
+    expect(second.searchResults[0].title).toBe('SearXNG Result https://searx-b.example.com')
+
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: {
+        provider: 'searxng-deepseek',
+        searxngBaseUrl: 'https://searx-b.example.com',
+        deepseekApiKey: '',
+      },
+    } as ReturnType<typeof getExtensionSettings>)
+    await expect(webSearchExecutor({ query: 'hybrid cache' }, {})).rejects.toMatchObject({ code: 20048 })
+  })
+
+  it('keeps pages with different query parameters and caps a hybrid merge at 16 results', () => {
+    const distinct = mergeSearchResults(
+      [
+        {
+          source: 'SearXNG',
+          items: [{ title: 'Page 1', link: 'https://example.com/item?id=1', snippet: 'first' }],
+        },
+        {
+          source: 'DeepSeek',
+          items: [{ title: 'Page 2', link: 'https://example.com/item?id=2', snippet: 'second' }],
+        },
+      ],
+      { maxItems: 16 }
+    )
+    expect(distinct.map((item) => item.link)).toEqual([
+      'https://example.com/item?id=1',
+      'https://example.com/item?id=2',
+    ])
+
+    const searxng = Array.from({ length: 20 }, (_, index) => ({
+      title: `SearXNG ${index}`,
+      link: `https://searx.example/${index}`,
+      snippet: `searx ${index}`,
+    }))
+    const deepseek = Array.from({ length: 20 }, (_, index) => ({
+      title: `DeepSeek ${index}`,
+      link: `https://deepseek.example/${index}`,
+      snippet: `deepseek ${index}`,
+    }))
+    expect(
+      mergeSearchResults([
+        { source: 'SearXNG', items: searxng },
+        { source: 'DeepSeek', items: deepseek },
+      ])
+    ).toHaveLength(16)
   })
 
   it('propagates the provider error when every configured provider fails', async () => {

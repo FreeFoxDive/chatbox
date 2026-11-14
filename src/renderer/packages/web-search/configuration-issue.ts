@@ -42,6 +42,11 @@ export function getWebSearchConfigurationIssue(
       return resolveDeepSeekWebSearchApiKey(configuration.deepseekApiKey, configuration.deepseekProviderApiKey)
         ? null
         : 'deepseek-api-key'
+    case 'searxng-deepseek':
+      if (!configuration.searxngBaseUrl?.trim()) return 'searxng-instance'
+      return resolveDeepSeekWebSearchApiKey(configuration.deepseekApiKey, configuration.deepseekProviderApiKey)
+        ? null
+        : 'deepseek-api-key'
     case 'bing':
       return null
   }

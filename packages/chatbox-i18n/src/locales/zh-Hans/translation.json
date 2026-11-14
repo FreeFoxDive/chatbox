@@ -1119,6 +1119,7 @@
   "The percentage of context window usage that triggers automatic compaction. Lower values save tokens but may lose context earlier.": "触发自动压缩的上下文窗口使用比例。较低的值可以节省 token，但可能会更早地丢失上下文。",
   "The response failed after the last step. What would you like to retry?": "响应在最后一步之后失败。你想重试哪一部分？",
   "The SearXNG instance must enable JSON output format in search settings.": "SearXNG 实例必须在搜索设置中启用 JSON 输出格式。",
+  "SearXNG and DeepSeek are searched together. Different summaries of the same page are both kept, and results from either side are still used if the other fails. Reading a page tries DeepSeek first, then fetches the page directly.": "同时搜索 SearXNG 与 DeepSeek。同一页面的不同摘要会一并保留；任一侧失败时，仍使用另一侧的结果。读取网页时先尝试 DeepSeek，失败后再直接抓取页面。",
   "The topP parameter controls the diversity of AI responses: lower values make the output more focused and predictable, while higher values allow for more varied and creative replies.": "topP 参数控制 AI 响应的多样性：较低的值使输出更集中和可预测，而较高的值则允许更多样化和富有创意的回复。",
   "The verification code you entered is incorrect or has expired. Please request a new code and try again.": "您输入的验证码不正确或已过期。请重新获取验证码并重试。",
   "The web version temporarily does not support local parsing of this file type. Please use text files (txt, markdown, etc.) or use <LinkToAdvancedFileProcessing>Chatbox AI Service</LinkToAdvancedFileProcessing> for cloud-based document analysis.": "网页版暂时不支持本地解析此文件类型。请使用文本文件（txt、markdown等）或使用<LinkToAdvancedFileProcessing>Chatbox AI 服务</LinkToAdvancedFileProcessing>进行云端文档分析。",

@@ -36,6 +36,7 @@ describe('parse_link capability consistency', () => {
     { id: 'querit', instance: new QueritSearch('stub-api-key') },
     { id: 'searxng', instance: new SearxngSearch('https://searx.example.com') },
     { id: 'deepseek', instance: new DeepSeekSearch('stub-api-key') },
+    { id: 'searxng-deepseek', instance: { supportsParseLink: true } },
   ]
 
   it.each(providers)('$id: PROVIDERS_WITH_PARSE_LINK matches supportsParseLink flag', ({ id, instance }) => {

@@ -41,6 +41,9 @@ function getMobileUserAgent() {
 abstract class WebSearch {
   abstract search(query: string, signal?: AbortSignal): Promise<SearchResult>
 
+  /** Label used when summaries from several providers describe the same page. */
+  sourceLabel = ''
+
   supportsParseLink = false
 
   /**
@@ -77,7 +80,7 @@ abstract class WebSearch {
     return new Response(text, { status: 200, headers: { 'content-type': 'application/json' } })
   }
 
-  async fetch(url: string, options: FetchOptions) {
+  async fetch(url: string, options: FetchOptions & { throwOnHttpError?: boolean }) {
     if (platform.type === 'mobile') {
       const method = options.method ?? 'GET'
       const responseType =
@@ -95,10 +98,13 @@ abstract class WebSearch {
         data: options.body,
         ...(responseType ? { responseType } : {}),
       })
+      if (options.throwOnHttpError && response.status >= 400) {
+        throw new Error(`Request failed with status ${response.status}`)
+      }
       return response.data
-    } else {
-      return ofetch(url, options)
     }
+    const { throwOnHttpError: _throwOnHttpError, ...request } = options
+    return ofetch(url, request)
   }
 }
 

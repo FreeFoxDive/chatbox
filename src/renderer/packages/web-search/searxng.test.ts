@@ -51,6 +51,34 @@ describe('SearxngSearch', () => {
     expect(normalizeSearxngBaseUrl('   ')).toBe('')
   })
 
+  it('keeps direct answers and infoboxes ahead of ordinary results', async () => {
+    const search = new SearxngSearch('https://searx.example.com')
+    vi.spyOn(search, 'fetch').mockResolvedValueOnce({
+      answers: ['18°C and cloudy'],
+      infoboxes: [
+        {
+          title: 'Shanghai',
+          content: 'Current weather',
+          urls: [{ url: 'https://weather.example/shanghai' }],
+          attributes: [{ label: 'Temperature', value: '18°C' }],
+        },
+      ],
+      results: [{ title: 'Forecast', url: 'https://example.com/forecast', content: 'Weekly forecast' }],
+    } as never)
+
+    await expect(search.search('shanghai weather')).resolves.toEqual({
+      items: [
+        { title: 'Answer', link: '', snippet: '18°C and cloudy' },
+        {
+          title: 'Shanghai',
+          link: 'https://weather.example/shanghai',
+          snippet: 'Current weather\nTemperature: 18°C',
+        },
+        { title: 'Forecast', link: 'https://example.com/forecast', snippet: 'Weekly forecast' },
+      ],
+    })
+  })
+
   it('accepts an empty results array', async () => {
     const search = new SearxngSearch('https://searx.example.com')
     vi.spyOn(search, 'fetch').mockResolvedValueOnce({ results: [] } as never)

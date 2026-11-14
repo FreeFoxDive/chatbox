@@ -87,7 +87,11 @@ export function RouteComponent() {
       ? t('Chatbox Search is a paid feature with advanced capabilities and better performance.')
       : provider === 'bing'
         ? t('Bing Search is provided for free use, but it may have limitations and is subject to change by Microsoft.')
-        : undefined
+        : provider === 'searxng-deepseek'
+          ? t(
+              'SearXNG and DeepSeek are searched together. Different summaries of the same page are both kept, and results from either side are still used if the other fails. Reading a page tries DeepSeek first, then fetches the page directly.'
+            )
+          : undefined
 
   return (
     <SettingsPage title={t('Web Search')} description={t('The search service used when a model searches the web.')}>
@@ -109,7 +113,7 @@ export function RouteComponent() {
             />
           )}
         />
-        {provider === 'searxng' && (
+        {(provider === 'searxng' || provider === 'searxng-deepseek') && (
           <CheckedFieldRow
             key="searxng"
             id="searxng-url"
@@ -152,7 +156,7 @@ export function RouteComponent() {
             getKeyUrl="https://open.bochaai.com"
           />
         )}
-        {provider === 'deepseek' && (
+        {(provider === 'deepseek' || provider === 'searxng-deepseek') && (
           <CheckedFieldRow
             key="deepseek"
             id="deepseek-api-key"
