@@ -22,6 +22,7 @@
     "android:assets": "npx capacitor-assets generate --android --assetPath resources",
     "apk:debug": "pnpm run cap:sync:android && cd android && gradlew.bat assembleDebug",
     "apk:release": "pnpm run cap:sync:android && cd android && gradlew.bat assembleRelease",
+    "apk:release:arm64": "pnpm run cap:sync:android && cd android && gradlew.bat assembleArm64Release",
     "postinstall": "node .erb/scripts/postinstall.cjs",
     "package": "tsx ./.erb/scripts/clean.js && pnpm run build && cross-env UPDATE_CHANNEL=alpha electron-builder build --publish never",
     "package:all": "tsx ./.erb/scripts/clean.js && pnpm run build && cross-env UPDATE_CHANNEL=alpha electron-builder build --publish never --win --mac --linux",
