@@ -1,4 +1,9 @@
 const changelog = `
+## v1.24.6 - 2026.11.14
+1. Added DeepSeek official web search and webpage fetch as a web search provider, with automatic fallback to the saved DeepSeek model provider API key
+2. Raised the web search snippet length limit passed to models from 150 to 800 characters for better real-time information retrieval
+
+
 ## v1.24.5 - 2026.11.13
 1. Fixed a large splash image floating over the provider key field when pasting on Android
 2. Added a Windows installer to the GitHub release
