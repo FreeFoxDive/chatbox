@@ -1,4 +1,10 @@
 const changelog = `
+## v1.24.7 - 2026.11.14
+1. Added a SearXNG + DeepSeek web search provider that searches both sources together and keeps different summaries of the same page
+2. Reading a webpage now tries DeepSeek first, then fetches the page directly when DeepSeek is blocked or returns no content
+3. SearXNG results now include direct answers and infoboxes, such as weather and calculations
+
+
 ## v1.24.6 - 2026.11.14
 1. Added DeepSeek official web search and webpage fetch as a web search provider, with automatic fallback to the saved DeepSeek model provider API key
 2. Raised the web search snippet length limit passed to models from 150 to 800 characters for better real-time information retrieval
