@@ -1,4 +1,8 @@
 const changelog = `
+## v1.24.8 - 2026.11.14
+1. Added an Android arm64-v8a (ARM v8) release APK alongside the universal Android APK
+
+
 ## v1.24.7 - 2026.11.14
 1. Added a SearXNG + DeepSeek web search provider that searches both sources together and keeps different summaries of the same page
 2. Reading a webpage now tries DeepSeek first, then fetches the page directly when DeepSeek is blocked or returns no content
