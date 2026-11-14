@@ -86,3 +86,7 @@ export function getAutoGenerateTitle() {
 export function getExtensionSettings() {
   return settingsStore.getState().extension
 }
+
+export function getDeepSeekProviderApiKey() {
+  return settingsStore.getState().providers?.[ModelProviderEnum.DeepSeek]?.apiKey
+}

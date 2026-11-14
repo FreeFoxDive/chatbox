@@ -35,6 +35,7 @@ function credentialSettings(): Settings {
         tavilyApiKey: 'tavily-key',
         bochaApiKey: 'bocha-key',
         queritApiKey: 'querit-key',
+        deepseekApiKey: 'deepseek-key',
         queritMaxResults: 5,
       },
       documentParser: { type: 'mineru', mineru: { apiToken: 'extension-mineru-token' } },
@@ -114,7 +115,7 @@ describe('projectSettingsForExport', () => {
       providers: { provider: { apiKey: 'api-key', oauth: { accessToken: 'access-token' } } },
       customProviders: [{ defaultSettings: { apiKey: 'default-api-key' } }],
       extension: {
-        webSearch: { tavilyApiKey: 'tavily-key' },
+        webSearch: { tavilyApiKey: 'tavily-key', deepseekApiKey: 'deepseek-key' },
         documentParser: { mineru: { apiToken: 'extension-mineru-token' } },
       },
       mcp: {

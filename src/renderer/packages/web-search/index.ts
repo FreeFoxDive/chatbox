@@ -2,18 +2,21 @@ import { cachified } from '@epic-web/cachified'
 import type { SearchResultItem } from '@shared/types'
 import { truncate } from 'lodash'
 import platform from '@/platform'
-import { getExtensionSettings, getLanguage, getLicenseKey } from '@/stores/settingActions'
+import { getDeepSeekProviderApiKey, getExtensionSettings, getLanguage, getLicenseKey } from '@/stores/settingActions'
 import { ChatboxAIAPIError } from '../../../shared/models/errors'
 import type WebSearch from './base'
 import { BingSearch } from './bing'
 import { BingNewsSearch } from './bing-news'
 import { BochaSearch } from './bocha'
 import { ChatboxSearch } from './chatbox-search'
+import { resolveDeepSeekWebSearchApiKey } from './configuration-issue'
+import { DeepSeekSearch } from './deepseek'
 import { QueritSearch } from './querit'
 import { normalizeSearxngBaseUrl, SearxngSearch } from './searxng'
 import { TavilySearch } from './tavily'
 
 const MAX_CONTEXT_ITEMS = 10
+const MAX_SNIPPET_LENGTH = 800
 
 // 根据配置的搜索提供方来选择搜索服务
 function getSearchProviders() {
@@ -72,6 +75,14 @@ function getSearchProviders() {
       selectedProviders.push(new SearxngSearch(searxngBaseUrl))
       break
     }
+    case 'deepseek': {
+      const apiKey = resolveDeepSeekWebSearchApiKey(settings.webSearch.deepseekApiKey, getDeepSeekProviderApiKey())
+      if (!apiKey) {
+        throw ChatboxAIAPIError.fromCodeName('deepseek_api_key_required', 'deepseek_api_key_required')
+      }
+      selectedProviders.push(new DeepSeekSearch(apiKey))
+      break
+    }
     default:
       throw new Error(`Unsupported search provider: ${provider}`)
   }
@@ -121,7 +132,7 @@ async function _searchRelatedResults(query: string, signal?: AbortSignal) {
 
   return items.map((item) => ({
     title: item.title,
-    snippet: truncate(item.snippet, { length: 150 }),
+    snippet: truncate(item.snippet, { length: MAX_SNIPPET_LENGTH }),
     link: item.link,
   }))
 }
@@ -153,7 +164,7 @@ export const webSearchExecutor = async (
  * Single source of truth: which configured providers offer the parse_link tool.
  * Keep in sync with the provider classes' `supportsParseLink` flags.
  */
-export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily'])
+export const PROVIDERS_WITH_PARSE_LINK: ReadonlySet<string> = new Set(['build-in', 'tavily', 'deepseek'])
 
 /**
  * Returns the first configured search provider that supports parseLink.

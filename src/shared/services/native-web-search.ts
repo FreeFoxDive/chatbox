@@ -18,7 +18,7 @@ export interface NativeWebSearchResultItem {
 }
 
 /** Same provider set the renderer's Web Search settings expose. */
-export type NativeWebSearchProvider = 'build-in' | 'bing' | 'tavily' | 'bocha' | 'querit' | 'searxng'
+export type NativeWebSearchProvider = 'build-in' | 'bing' | 'tavily' | 'bocha' | 'querit' | 'searxng' | 'deepseek'
 
 export const nativeWebSearchProviderOptions: Array<{ id: NativeWebSearchProvider; label: string }> = [
   { id: 'build-in', label: 'Chatbox AI' },
@@ -27,6 +27,7 @@ export const nativeWebSearchProviderOptions: Array<{ id: NativeWebSearchProvider
   { id: 'bocha', label: 'BoCha' },
   { id: 'querit', label: 'Querit' },
   { id: 'searxng', label: 'SearXNG' },
+  { id: 'deepseek', label: 'DeepSeek' },
 ]
 
 export interface NativeWebSearchSettings {
@@ -81,8 +82,12 @@ export interface NativeWebSearchOptions {
 }
 
 const TAVILY_DEFAULT_HOST = 'https://api.tavily.com'
+const DEEPSEEK_DEFAULT_HOST = 'https://api.deepseek.com'
 const CHATBOX_DEFAULT_ORIGIN = 'https://api.chatboxai.app'
 const DEFAULT_MAX_RESULTS = 8
+const DEEPSEEK_QUERY_MAX_CHARS = 128
+const DEEPSEEK_DEFAULT_COUNT = 10
+const DEEPSEEK_MAX_COUNT = 50
 
 interface TavilyResponseItem {
   title?: string
@@ -94,7 +99,12 @@ export function hasNativeWebSearchConfiguration(
   settings: Pick<NativeWebSearchSettings, 'provider' | 'apiKey'> & Partial<Pick<NativeWebSearchSettings, 'apiHost'>>,
   licenseKey?: string
 ): boolean {
-  if (settings.provider === 'tavily' || settings.provider === 'bocha' || settings.provider === 'querit') {
+  if (
+    settings.provider === 'tavily' ||
+    settings.provider === 'bocha' ||
+    settings.provider === 'querit' ||
+    settings.provider === 'deepseek'
+  ) {
     return Boolean(settings.apiKey.trim())
   }
   if (settings.provider === 'build-in') return Boolean(licenseKey?.trim())
@@ -112,6 +122,7 @@ export async function searchNativeWeb(
   if (provider === 'bocha') return searchNativeBocha(query, options)
   if (provider === 'querit') return searchNativeQuerit(query, options)
   if (provider === 'searxng') return searchNativeSearxng(query, options)
+  if (provider === 'deepseek') return searchNativeDeepSeek(query, options)
   return searchNativeTavily(query, options)
 }
 
@@ -153,6 +164,83 @@ async function searchNativeSearxng(
         title,
         link,
         snippet: nonEmptyString(item.content) ?? nonEmptyString(item.snippet) ?? '',
+      }
+    })
+    .filter((item): item is NativeWebSearchResultItem => item !== null)
+}
+
+interface DeepSeekSearchResult {
+  title?: unknown
+  url?: unknown
+  snippet?: unknown
+  summary?: unknown
+  date?: unknown
+}
+
+interface DeepSeekSearchResponse {
+  results?: unknown
+  error?: { message?: unknown }
+}
+
+/** DeepSeek accepts 1–128 Unicode characters and rejects an all-whitespace query. */
+function normalizeDeepSeekQuery(query: string): string {
+  return Array.from(query.trim()).slice(0, DEEPSEEK_QUERY_MAX_CHARS).join('').trim()
+}
+
+function deepSeekResultCount(maxResults: number | undefined): number {
+  const requested = maxResults ?? DEEPSEEK_DEFAULT_COUNT
+  if (!Number.isFinite(requested)) return DEEPSEEK_DEFAULT_COUNT
+  return Math.min(DEEPSEEK_MAX_COUNT, Math.max(1, Math.trunc(requested)))
+}
+
+function deepSeekSnippet(item: DeepSeekSearchResult): string {
+  const body = nonEmptyString(item.summary) ?? nonEmptyString(item.snippet) ?? ''
+  const date = nonEmptyString(item.date)
+  if (!date) return body
+  return `[${date}] ${body}`.trim()
+}
+
+async function searchNativeDeepSeek(
+  query: string,
+  options: NativeWebSearchOptions
+): Promise<NativeWebSearchResultItem[]> {
+  const normalizedQuery = normalizeDeepSeekQuery(query)
+  if (!normalizedQuery) return []
+
+  const fetchFn = options.fetchFn ?? fetch
+  const host = (options.apiHost?.trim() || DEEPSEEK_DEFAULT_HOST).replace(/\/+$/, '')
+  const response = await fetchFn(`${host}/v1/tools/search`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${options.apiKey ?? ''}`,
+    },
+    body: JSON.stringify({
+      query: normalizedQuery,
+      count: deepSeekResultCount(options.maxResults),
+      need_content: false,
+    }),
+    signal: options.signal as NativeFetchInit['signal'],
+  } as NativeFetchInit)
+
+  const payload = (await response.json().catch(() => null)) as DeepSeekSearchResponse | null
+  const errorMessage = nonEmptyString(payload?.error?.message)
+  if (!response.ok || payload?.error) {
+    throw new Error(errorMessage ?? `DeepSeek search failed with status ${response.status}`)
+  }
+  if (!payload || !Array.isArray(payload.results)) {
+    throw new Error('DeepSeek search returned an invalid JSON response')
+  }
+
+  return payload.results
+    .filter((item): item is DeepSeekSearchResult => typeof item === 'object' && item !== null)
+    .map((item) => {
+      const link = nonEmptyString(item.url)
+      if (!link) return null
+      return {
+        title: nonEmptyString(item.title) ?? '',
+        link,
+        snippet: deepSeekSnippet(item),
       }
     })
     .filter((item): item is NativeWebSearchResultItem => item !== null)

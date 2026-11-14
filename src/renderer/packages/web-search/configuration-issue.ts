@@ -6,6 +6,13 @@ type WebSearchConfiguration = {
   bochaApiKey?: string
   queritApiKey?: string
   searxngBaseUrl?: string
+  deepseekApiKey?: string
+  /** API key saved on the DeepSeek model provider, used when deepseekApiKey is blank. */
+  deepseekProviderApiKey?: string
+}
+
+export function resolveDeepSeekWebSearchApiKey(deepseekApiKey?: string, deepseekProviderApiKey?: string): string {
+  return deepseekApiKey?.trim() || deepseekProviderApiKey?.trim() || ''
 }
 
 export type WebSearchConfigurationIssue =
@@ -14,6 +21,7 @@ export type WebSearchConfigurationIssue =
   | 'bocha-api-key'
   | 'querit-api-key'
   | 'searxng-instance'
+  | 'deepseek-api-key'
 
 export function getWebSearchConfigurationIssue(
   configuration: WebSearchConfiguration,
@@ -30,6 +38,10 @@ export function getWebSearchConfigurationIssue(
       return configuration.queritApiKey ? null : 'querit-api-key'
     case 'searxng':
       return configuration.searxngBaseUrl?.trim() ? null : 'searxng-instance'
+    case 'deepseek':
+      return resolveDeepSeekWebSearchApiKey(configuration.deepseekApiKey, configuration.deepseekProviderApiKey)
+        ? null
+        : 'deepseek-api-key'
     case 'bing':
       return null
   }

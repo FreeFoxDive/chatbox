@@ -13,7 +13,7 @@ import {
   UnstyledButton,
 } from '@mantine/core'
 import { TestId } from '@shared/automation/testids'
-import type { AgentModeValue, KnowledgeBase } from '@shared/types'
+import { type AgentModeValue, type KnowledgeBase, ModelProviderEnum } from '@shared/types'
 import {
   IconAlertCircle,
   IconCheck,
@@ -225,6 +225,8 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
   const bochaApiKey = useSettingsStore((s) => s.extension.webSearch.bochaApiKey)
   const queritApiKey = useSettingsStore((s) => s.extension.webSearch.queritApiKey)
   const searxngBaseUrl = useSettingsStore((s) => s.extension.webSearch.searxngBaseUrl)
+  const deepseekApiKey = useSettingsStore((s) => s.extension.webSearch.deepseekApiKey)
+  const deepseekProviderApiKey = useSettingsStore((s) => s.providers?.[ModelProviderEnum.DeepSeek]?.apiKey)
   const webSearchProviderLabel =
     WEB_SEARCH_PROVIDERS.find((p) => p.value === webSearchProvider)?.label ?? webSearchProvider
   const webSearchConfigurationIssue = webBrowsingMode
@@ -235,6 +237,8 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
           bochaApiKey,
           queritApiKey,
           searxngBaseUrl,
+          deepseekApiKey,
+          deepseekProviderApiKey,
         },
         licenseKey
       )
@@ -255,12 +259,12 @@ const AgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProps>(fun
     (provider: WebSearchProviderValue) => {
       return (
         getWebSearchConfigurationIssue(
-          { provider, tavilyApiKey, bochaApiKey, queritApiKey, searxngBaseUrl },
+          { provider, tavilyApiKey, bochaApiKey, queritApiKey, searxngBaseUrl, deepseekApiKey, deepseekProviderApiKey },
           licenseKey
         ) === null
       )
     },
-    [bochaApiKey, licenseKey, queritApiKey, searxngBaseUrl, tavilyApiKey]
+    [bochaApiKey, deepseekApiKey, deepseekProviderApiKey, licenseKey, queritApiKey, searxngBaseUrl, tavilyApiKey]
   )
 
   // MCP state

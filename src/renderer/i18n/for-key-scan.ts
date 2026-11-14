@@ -118,6 +118,9 @@ function _errorI18nKeys(t: (key: string) => string) {
   t(
     'You have selected SearXNG as the search provider, but an instance URL has not been entered yet. Please <OpenExtensionSettingButton>click here to open Settings</OpenExtensionSettingButton> and enter your SearXNG instance URL, or choose a different search provider.'
   )
+  t(
+    'You have selected DeepSeek as the search provider, but an API key has not been entered yet. Please <OpenExtensionSettingButton>click here to open Settings</OpenExtensionSettingButton> and enter your API key, or add one in the DeepSeek model provider settings.'
+  )
   t('Failed to read webpage content. Please try again later or use a different URL.')
   t(
     'The current search provider does not support reading webpages. Please <OpenExtensionSettingButton>choose a different search provider</OpenExtensionSettingButton> that supports this capability.'
@@ -313,6 +316,8 @@ function _otherI18nKeys(t: (key: string) => string) {
   t('Add a Querit API key in Web Search settings.')
   t('SearXNG URL is missing')
   t('Add a SearXNG instance URL in Web Search settings.')
+  t('DeepSeek API key is missing')
+  t('Add a DeepSeek API key in Web Search settings, or in the DeepSeek model provider.')
   t('Activate Chatbox AI, or pick an image model from another provider.')
   t('Authentication failed')
   t('Check the API key in Model Provider settings, or choose another model.')

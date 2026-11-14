@@ -21,6 +21,7 @@ export function CheckedFieldRow({
   failureMessage,
   getKeyUrl,
   getKeyLabel,
+  fallbackValue,
 }: {
   id: string
   label: string
@@ -34,12 +35,15 @@ export function CheckedFieldRow({
   failureMessage: string
   getKeyUrl?: string
   getKeyLabel?: string
+  /** Used when the field is blank, so a reused credential can still be checked. */
+  fallbackValue?: string
 }) {
   const { t } = useTranslation()
   const [checking, setChecking] = useState(false)
   const [available, setAvailable] = useState<boolean>()
   const run = useRef(0)
   const Input = secret ? PasswordInput : TextInput
+  const effectiveValue = (value?.trim() ? value : (fallbackValue ?? '')).trim()
 
   return (
     <SettingRow
@@ -87,12 +91,12 @@ export function CheckedFieldRow({
               variant="default"
               size="sm"
               loading={checking}
-              disabled={!value?.trim()}
+              disabled={!effectiveValue}
               onClick={async () => {
                 const current = ++run.current
                 setChecking(true)
                 setAvailable(undefined)
-                const ok = await check(value ?? '').then(
+                const ok = await check(effectiveValue).then(
                   () => true,
                   () => false
                 )

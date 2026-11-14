@@ -21,6 +21,9 @@ describe('native web search', () => {
     expect(hasNativeWebSearchConfiguration({ provider: 'searxng', apiKey: '', apiHost: 'https://search.test' })).toBe(
       true
     )
+    expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: '' })).toBe(false)
+    expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: '  ' })).toBe(false)
+    expect(hasNativeWebSearchConfiguration({ provider: 'deepseek', apiKey: 'sk-key' })).toBe(true)
   })
 
   it('searches through the chatbox build-in endpoint with the license key and injected headers', async () => {
@@ -112,6 +115,76 @@ describe('native web search', () => {
     const [url, init] = (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(url).toBe('https://search.test/search?q=chatbox%20mobile&format=json')
     expect((init as RequestInit).headers).toEqual({ Accept: 'application/json' })
+  })
+
+  it('searches DeepSeek and prefers the long summary with its publish date', async () => {
+    const fetchFn = mockFetchResponse({
+      results: [
+        {
+          title: 'Weather',
+          url: 'https://weather.example',
+          snippet: 'short',
+          summary: 'Shanghai is 18°C today.',
+          date: '2026-11-14T00:00:00+00:00',
+        },
+        { title: 'No link', summary: 'ignored' },
+        { title: 'Snippet only', url: 'https://snippet.example', snippet: 'fallback snippet' },
+      ],
+    })
+    const items = await searchNativeWeb('上海 天气', {
+      provider: 'deepseek',
+      apiKey: 'sk-key',
+      apiHost: 'https://api.deepseek.com/',
+      fetchFn,
+    })
+
+    expect(items).toEqual([
+      {
+        title: 'Weather',
+        link: 'https://weather.example',
+        snippet: '[2026-11-14T00:00:00+00:00] Shanghai is 18°C today.',
+      },
+      { title: 'Snippet only', link: 'https://snippet.example', snippet: 'fallback snippet' },
+    ])
+    const [url, init] = (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(url).toBe('https://api.deepseek.com/v1/tools/search')
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      query: '上海 天气',
+      count: 10,
+      need_content: false,
+    })
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer sk-key' })
+  })
+
+  it('truncates a DeepSeek query to 128 Unicode characters and skips a blank query', async () => {
+    const fetchFn = mockFetchResponse({ results: [] })
+    const emoji = '😀'
+    const query = `${'测'.repeat(127)}${emoji}tail`
+    await searchNativeWeb(query, { provider: 'deepseek', apiKey: 'sk-key', maxResults: 80, fetchFn })
+    const body = JSON.parse(
+      ((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit).body as string
+    )
+    expect(Array.from(body.query)).toHaveLength(128)
+    expect(body.query.endsWith(emoji)).toBe(true)
+    expect(body.query).not.toContain('tail')
+    expect(body.count).toBe(50)
+
+    const unusedFetch = vi.fn()
+    await expect(
+      searchNativeWeb('   ', {
+        provider: 'deepseek',
+        apiKey: 'sk-key',
+        fetchFn: unusedFetch as unknown as typeof fetch,
+      })
+    ).resolves.toEqual([])
+    expect(unusedFetch).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a DeepSeek error payload even when the transport reports success', async () => {
+    const fetchFn = mockFetchResponse({ error: { message: 'Insufficient balance' } })
+    await expect(searchNativeWeb('weather', { provider: 'deepseek', apiKey: 'sk-key', fetchFn })).rejects.toThrow(
+      'Insufficient balance'
+    )
   })
 
   it('throws on non-ok responses', async () => {

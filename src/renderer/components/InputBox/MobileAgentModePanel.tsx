@@ -8,6 +8,7 @@ import {
   resolveLocalWorkCapabilities,
   setLocalWorkCapability,
 } from '@shared/mobile-work/capabilities'
+import { ModelProviderEnum } from '@shared/types'
 import { IconBook, IconChevronLeft, IconChevronRight, IconDeviceMobile, IconNotes, IconPlug } from '@tabler/icons-react'
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -89,7 +90,9 @@ const MobileAgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProp
   })
   const webSearch = useSettingsStore((s) => s.extension.webSearch)
   const licenseKey = useSettingsStore((s) => s.licenseKey)
-  const webIssue = webBrowsingMode && getWebSearchConfigurationIssue(webSearch, licenseKey) !== null
+  const deepseekProviderApiKey = useSettingsStore((s) => s.providers?.[ModelProviderEnum.DeepSeek]?.apiKey)
+  const webIssue =
+    webBrowsingMode && getWebSearchConfigurationIssue({ ...webSearch, deepseekProviderApiKey }, licenseKey) !== null
   const webProvider = WEB_SEARCH_PROVIDERS.find((p) => p.value === webSearch.provider)?.label ?? webSearch.provider
   const labels: Record<LocalWorkCapabilityId, string> = {
     photos: t('Photos'),

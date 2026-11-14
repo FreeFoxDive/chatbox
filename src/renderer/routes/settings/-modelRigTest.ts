@@ -1,5 +1,5 @@
-import type { Settings } from '@shared/types'
-import { ModelProviderEnum } from '@shared/types'
+import { ModelProviderEnum, type Settings } from '@shared/types'
+import { resolveDeepSeekWebSearchApiKey } from '@/packages/web-search/configuration-issue'
 import type { PictureRef } from './-modelRigSettings'
 import { describeError, effectiveParserType, type ModelRigSlotId, searchProvider } from './-modelRigSettings'
 
@@ -153,6 +153,18 @@ async function testSearchSlot(deps: ModelRigTestDeps): Promise<SlotTestResult> {
   }
   if (provider === 'searxng' && !deps.settings.extension?.webSearch?.searxngBaseUrl?.trim()) {
     return fail('SearXNG URL is missing', 'Add a SearXNG instance URL in Web Search settings.')
+  }
+  if (
+    provider === 'deepseek' &&
+    !resolveDeepSeekWebSearchApiKey(
+      deps.settings.extension?.webSearch?.deepseekApiKey,
+      deps.settings.providers?.[ModelProviderEnum.DeepSeek]?.apiKey
+    )
+  ) {
+    return fail(
+      'DeepSeek API key is missing',
+      'Add a DeepSeek API key in Web Search settings, or in the DeepSeek model provider.'
+    )
   }
   const { latencyMs } = await timed(() => deps.searchWeb())
   return ok(latencyMs)

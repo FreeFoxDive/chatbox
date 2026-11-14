@@ -1,5 +1,5 @@
 import { Flex, Select, Text } from '@mantine/core'
-import type { Settings } from '@shared/types'
+import { ModelProviderEnum, type Settings } from '@shared/types'
 import { IconCheck, IconX } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ofetch } from 'ofetch'
@@ -10,6 +10,7 @@ import { SettingRow, SettingsPage, SettingsSection } from '@/components/settings
 import { PROVIDERS_WITH_PARSE_LINK } from '@/packages/web-search'
 import { BochaSearch } from '@/packages/web-search/bocha'
 import { WEB_SEARCH_PROVIDERS, type WebSearchProviderValue } from '@/packages/web-search/constants'
+import { DeepSeekSearch } from '@/packages/web-search/deepseek'
 import { QUERIT_SEARCH_URL } from '@/packages/web-search/querit'
 import { SearxngSearch } from '@/packages/web-search/searxng'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -36,6 +37,10 @@ async function checkQuerit(apiKey: string) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: { query: 'Chatbox' },
   })
+}
+
+async function checkDeepSeek(apiKey: string) {
+  await new DeepSeekSearch(apiKey).search('Chatbox')
 }
 
 function ProvidedTools({ provider }: { provider: WebSearchProviderValue }) {
@@ -71,6 +76,8 @@ export function RouteComponent() {
   const extension = useSettingsStore((state) => state.extension)
   const webSearch = extension.webSearch
   const provider = webSearch.provider
+  const deepseekProviderApiKey = useSettingsStore((state) => state.providers?.[ModelProviderEnum.DeepSeek]?.apiKey)
+  const reusesDeepSeekProviderKey = Boolean(deepseekProviderApiKey?.trim())
 
   const updateWebSearch = (patch: Partial<WebSearchSettings>) =>
     setSettings({ extension: { ...extension, webSearch: { ...webSearch, ...patch } } })
@@ -145,6 +152,30 @@ export function RouteComponent() {
             getKeyUrl="https://open.bochaai.com"
           />
         )}
+        {provider === 'deepseek' && (
+          <CheckedFieldRow
+            key="deepseek"
+            id="deepseek-api-key"
+            label={t('DeepSeek API Key')}
+            description={
+              reusesDeepSeekProviderKey
+                ? t('Leave blank to reuse the API key saved for the DeepSeek model provider.')
+                : undefined
+            }
+            secret
+            value={webSearch.deepseekApiKey}
+            fallbackValue={deepseekProviderApiKey}
+            placeholder={
+              reusesDeepSeekProviderKey
+                ? (t('Using the DeepSeek model provider API key') ?? undefined)
+                : (t('Enter your DeepSeek API Key') ?? undefined)
+            }
+            onChange={(deepseekApiKey) => updateWebSearch({ deepseekApiKey })}
+            check={checkDeepSeek}
+            failureMessage={t('API key invalid!')}
+            getKeyUrl="https://platform.deepseek.com/api_keys"
+          />
+        )}
         {provider === 'querit' && (
           <CheckedFieldRow
             key="querit"
@@ -203,7 +234,6 @@ export function RouteComponent() {
           />
         </SettingsSection>
       )}
-
     </SettingsPage>
   )
 }

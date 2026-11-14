@@ -1,6 +1,6 @@
 import { Popover, UnstyledButton } from '@mantine/core'
 import { TestId } from '@shared/automation/testids'
-import type { AgentModeValue, KnowledgeBase } from '@shared/types'
+import { type AgentModeValue, type KnowledgeBase, ModelProviderEnum } from '@shared/types'
 import { IconRobot } from '@tabler/icons-react'
 import { useLocation } from '@tanstack/react-router'
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -78,8 +78,10 @@ const AgentModeButton: FC<AgentModeButtonProps> = ({
   const entry = useSessionAgentMode(sessionId)
   const webSearchConfiguration = useSettingsStore((state) => state.extension.webSearch)
   const licenseKey = useSettingsStore((state) => state.licenseKey)
+  const deepseekProviderApiKey = useSettingsStore((state) => state.providers?.[ModelProviderEnum.DeepSeek]?.apiKey)
   const hasWebSearchWarning =
-    webBrowsingMode && getWebSearchConfigurationIssue(webSearchConfiguration, licenseKey) !== null
+    webBrowsingMode &&
+    getWebSearchConfigurationIssue({ ...webSearchConfiguration, deepseekProviderApiKey }, licenseKey) !== null
   const settingsOpened =
     Boolean((location.search as Record<string, unknown>)?.settings) || location.pathname.startsWith('/settings')
 

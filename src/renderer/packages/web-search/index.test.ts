@@ -5,6 +5,7 @@ vi.mock('@/stores/settingActions', () => ({
   getExtensionSettings: vi.fn(),
   getLanguage: vi.fn(() => 'en'),
   getLicenseKey: vi.fn(() => 'test-license-key'),
+  getDeepSeekProviderApiKey: vi.fn(() => ''),
 }))
 
 // Mock the search providers to avoid actual network calls
@@ -51,6 +52,23 @@ vi.mock('./searxng', async (importOriginal) => {
   }
 })
 
+vi.mock('./deepseek', () => {
+  return {
+    DeepSeekSearch: class {
+      constructor(private readonly apiKey: string) {}
+      search = vi.fn().mockImplementation(() => ({
+        items: [
+          {
+            title: `DeepSeek Result ${this.apiKey}`,
+            snippet: 'x'.repeat(900),
+            link: 'https://example.com',
+          },
+        ],
+      }))
+    },
+  }
+})
+
 vi.mock('./chatbox-search', () => {
   return {
     ChatboxSearch: class {
@@ -61,14 +79,16 @@ vi.mock('./chatbox-search', () => {
   }
 })
 
-import { getExtensionSettings } from '@/stores/settingActions'
+import { getDeepSeekProviderApiKey, getExtensionSettings } from '@/stores/settingActions'
 import { testWebSearchConnection, webSearchExecutor } from './index'
 
 const mockGetExtensionSettings = vi.mocked(getExtensionSettings)
+const mockGetDeepSeekProviderApiKey = vi.mocked(getDeepSeekProviderApiKey)
 
 describe('webSearchExecutor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetDeepSeekProviderApiKey.mockReturnValue('')
   })
 
   it('returns different results for different providers with same query', async () => {
@@ -153,6 +173,50 @@ describe('webSearchExecutor', () => {
     await expect(webSearchExecutor({ query: 'missing url' }, {})).rejects.toMatchObject({
       code: 20036,
     })
+  })
+
+  it('falls back to the DeepSeek model provider API key', async () => {
+    mockGetDeepSeekProviderApiKey.mockReturnValue('provider-key')
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: { provider: 'deepseek', deepseekApiKey: '  ' },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const result = await webSearchExecutor({ query: 'deepseek provider fallback' }, {})
+
+    expect(result.searchResults[0].title).toBe('DeepSeek Result provider-key')
+  })
+
+  it('prefers the dedicated DeepSeek web search API key', async () => {
+    mockGetDeepSeekProviderApiKey.mockReturnValue('provider-key')
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: { provider: 'deepseek', deepseekApiKey: 'search-key' },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const result = await webSearchExecutor({ query: 'deepseek dedicated key' }, {})
+
+    expect(result.searchResults[0].title).toBe('DeepSeek Result search-key')
+  })
+
+  it('rejects DeepSeek search when neither API key is set', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: { provider: 'deepseek', deepseekApiKey: '' },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    await expect(webSearchExecutor({ query: 'deepseek missing key' }, {})).rejects.toMatchObject({
+      code: 20048,
+    })
+  })
+
+  it('keeps search summaries up to 800 characters', async () => {
+    mockGetExtensionSettings.mockReturnValue({
+      webSearch: { provider: 'deepseek', deepseekApiKey: 'search-key' },
+    } as ReturnType<typeof getExtensionSettings>)
+
+    const result = await webSearchExecutor({ query: 'deepseek long summary' }, {})
+
+    expect(result.searchResults[0].snippet).toHaveLength(800)
+    expect(result.searchResults[0].snippet.endsWith('...')).toBe(true)
+    expect(result.searchResults[0].snippet.startsWith('x')).toBe(true)
   })
 
   it('propagates the provider error when every configured provider fails', async () => {
