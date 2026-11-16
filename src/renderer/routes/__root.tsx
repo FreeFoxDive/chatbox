@@ -40,6 +40,7 @@ import '@/modals'
 import { rendererApplication } from '@/app/renderer-application'
 import DbSchemaGuardDialog from '@/components/DbSchemaGuardDialog'
 import { BackupTaskOverlay } from '@/components/settings/BackupTaskOverlay'
+import { ServerBackupScheduler } from '@/components/settings/ServerBackupScheduler'
 import SettingsModal from '@/modals/Settings'
 import { navigateToSettings } from '@/modals/settings-navigation'
 import { getOS } from '@/packages/navigator'
@@ -396,6 +397,7 @@ function Root() {
       {/* IndexedDB schema 与当前版本不匹配时的升级/刷新引导 */}
       <DbSchemaGuardDialog />
       <BackupTaskOverlay />
+      <ServerBackupScheduler />
       {/* 手机端举报内容 */}
       {/* <ReportContentDialog /> */}
       {/* 搜索 */}

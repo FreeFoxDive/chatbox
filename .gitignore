@@ -217,6 +217,9 @@ android/.signing/
 *.jks
 *.keystore
 
+# Backup server runtime data. The server source itself stays in the repo.
+/server/data/
+
 # Local headless evaluation artifacts
 /jobs/
 /scripts/terminal_bench/__pycache__/

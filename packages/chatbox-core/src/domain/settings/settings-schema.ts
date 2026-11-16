@@ -586,6 +586,8 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   defaultPrompt: z.string().optional(), // 新会话的默认 prompt
 
   proxy: z.string().optional(), // 代理地址
+  /** Origin of the self-hosted backup server. Tokens are stored outside settings. */
+  serverBackupUrl: z.string().optional(),
 
   allowReportingAndTracking: z.boolean().optional(), // 是否允许错误报告和事件追踪
 

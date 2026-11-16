@@ -35,5 +35,6 @@
     "**/*.stories.ts",
     ".storybook",
     ".pnpm-store",
+    "server",
   ]
 }

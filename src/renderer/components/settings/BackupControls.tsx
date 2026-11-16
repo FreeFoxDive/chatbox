@@ -1,6 +1,7 @@
-import { inspectBackup } from '@chatbox/core/backup-import'
 import type { BackupExportFormat } from '@chatbox/core/backup-export'
+import { inspectBackup } from '@chatbox/core/backup-import'
 import { type BackupResult, type BackupSelection, getBackupImportPartialResult } from '@chatbox/core/backup-v3'
+import type { ByteSource } from '@chatbox/core/io'
 import { isAbortError } from '@chatbox/core/utils/abort'
 import { Box, Button, Checkbox, FileButton, Radio, Stack, Text } from '@mantine/core'
 import { IconChevronDown, IconChevronRight, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
@@ -11,6 +12,7 @@ import { type BackupConversationOption, BackupConversationSelector } from './Bac
 import { BackupDialog } from './BackupDialog'
 import classes from './BackupDialog.module.css'
 import { BackupImportReport } from './BackupImportReport'
+import { ServerBackupSection } from './ServerBackupSection'
 import { SettingRow, SettingsSection } from './SettingsLayout'
 
 type Conversation = Omit<BackupConversationOption, 'selected'>
@@ -18,6 +20,7 @@ type Conversation = Omit<BackupConversationOption, 'selected'>
 export function BackupControls() {
   const { t } = useTranslation()
   const [exportOpened, setExportOpened] = useState(false)
+  const [exportDestination, setExportDestination] = useState<'file' | 'server'>('file')
   const [exportFormat, setExportFormat] = useState<BackupExportFormat>('v3')
   const [legacyOptionsExpanded, setLegacyOptionsExpanded] = useState(false)
   const legacyOptionsId = useId()
@@ -37,13 +40,15 @@ export function BackupControls() {
   const [listError, setListError] = useState<string>()
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [preview, setPreview] = useState<{
-    file: File
+    source: ByteSource & { close?: () => Promise<void> }
+    label: string
     manifest: Awaited<ReturnType<typeof inspectBackup>>
   } | null>(null)
   const [result, setResult] = useState<{
     operation: 'export' | 'import'
     title: string
     message: string
+    uploaded?: boolean
     warningCount?: number
     missingResources?: number
     importReport?: BackupResult['importReport']
@@ -113,15 +118,21 @@ export function BackupControls() {
     setExportOpened(false)
     setResult(null)
     try {
-      const exported = await rendererBackupService.export(chosen, exportFormat)
+      const exported =
+        exportDestination === 'server'
+          ? await rendererBackupService.exportToServer({ ...chosen })
+          : await rendererBackupService.export(chosen, exportFormat)
       setResult({
         operation: 'export',
-        title: t('Backup archive created'),
+        title: exportDestination === 'server' ? t('Uploaded the backup to the server.') : t('Backup archive created'),
+        uploaded: exportDestination === 'server',
         warningCount: exported.complete.counts.warning,
         missingResources: exported.missingResources,
         message: exported.cleanupPending
           ? t('The backup is complete. Temporary files will be cleaned up on the next start.')
-          : t('The backup file is ready.'),
+          : exportDestination === 'server'
+            ? ''
+            : t('The backup file is ready.'),
       })
     } catch (error) {
       if (!isAbortError(error))
@@ -134,14 +145,14 @@ export function BackupControls() {
     }
   }
 
-  const openImport = async (file: File | null) => {
-    if (!file) return
+  const openImportSource = async (source: ByteSource & { close?: () => Promise<void> }, label: string) => {
     setIsPreviewing(true)
     setResult(null)
     try {
-      const manifest = await inspectBackup(file)
-      setPreview({ file, manifest })
+      const manifest = await inspectBackup(source)
+      setPreview({ source, label, manifest })
     } catch (error) {
+      await source.close?.()
       setResult({
         operation: 'import',
         title: t('Import failed'),
@@ -154,13 +165,30 @@ export function BackupControls() {
     }
   }
 
+  const openImport = async (file: File | null) => {
+    if (!file) return
+    const generating = rendererBackupService.getGeneratingSessionIds()
+    if (generating.length) {
+      showGenerating('import', generating)
+      resetInput.current?.()
+      return
+    }
+    await openImportSource(file, file.name)
+  }
+
+  const closePreview = () => {
+    const current = preview
+    setPreview(null)
+    void current?.source.close?.()
+  }
+
   const importBackup = async () => {
     if (!preview) return
-    const file = preview.file
+    const source = preview.source
     setPreview(null)
     setResult(null)
     try {
-      const imported = await rendererBackupService.import(file)
+      const imported = await rendererBackupService.import(source)
       setResult({
         operation: 'import',
         title: t('Import completed'),
@@ -209,6 +237,8 @@ export function BackupControls() {
           error: true,
         })
       }
+    } finally {
+      await source.close?.()
     }
   }
 
@@ -223,12 +253,34 @@ export function BackupControls() {
           label={t('Export Data')}
           description={t('Save settings, conversations and copilots to a backup file.')}
           control={
-            <Button size="xs" onClick={() => setExportOpened(true)}>
+            <Button
+              size="xs"
+              onClick={() => {
+                setExportDestination('file')
+                setExportOpened(true)
+              }}
+            >
               {t('Export Data')}
             </Button>
           }
         />
       </SettingsSection>
+      <ServerBackupSection
+        onBackup={() => {
+          setExportFormat('v3')
+          setExportDestination('server')
+          setExportOpened(true)
+        }}
+        onRestore={(source, label) => {
+          const generating = rendererBackupService.getGeneratingSessionIds()
+          if (generating.length) {
+            void source.close?.()
+            showGenerating('import', generating)
+            return
+          }
+          void openImportSource(source, label)
+        }}
+      />
       <SettingsSection title={t('Import Backup')} tone="danger">
         <SettingRow
           id="import-data"
@@ -284,7 +336,7 @@ export function BackupControls() {
       <BackupDialog
         opened={exportOpened && blocked === null}
         onClose={() => setExportOpened(false)}
-        title={t('Export Data')}
+        title={exportDestination === 'server' ? t('Back up to server') : t('Export Data')}
         footer={
           <>
             <Button variant="default" onClick={() => setExportOpened(false)}>
@@ -294,7 +346,7 @@ export function BackupControls() {
               onClick={() => void exportBackup()}
               disabled={!canExport || (exportSelection.sessions && (isLoading || !!listError))}
             >
-              {t('Export Data')}
+              {exportDestination === 'server' ? t('Back up to server') : t('Export Data')}
             </Button>
           </>
         }
@@ -411,65 +463,67 @@ export function BackupControls() {
                 ) : null}
               </>
             ) : null}
-            <Stack gap="xs" mt="md">
-              <Button
-                variant="subtle"
-                size="compact-xs"
-                c="dimmed"
-                w="fit-content"
-                px={0}
-                aria-label={t('Export for older versions')}
-                aria-expanded={legacyOptionsExpanded}
-                aria-controls={legacyOptionsId}
-                aria-describedby={exportFormat !== 'v3' ? `${legacyOptionsId}-format` : undefined}
-                leftSection={legacyOptionsExpanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-                onClick={() => setLegacyOptionsExpanded((expanded) => !expanded)}
-              >
-                {t('Export for older versions')}
-                {exportFormat !== 'v3' ? (
-                  <span id={`${legacyOptionsId}-format`}>{` · ${exportFormat.toUpperCase()}`}</span>
+            {exportDestination === 'file' ? (
+              <Stack gap="xs" mt="md">
+                <Button
+                  variant="subtle"
+                  size="compact-xs"
+                  c="dimmed"
+                  w="fit-content"
+                  px={0}
+                  aria-label={t('Export for older versions')}
+                  aria-expanded={legacyOptionsExpanded}
+                  aria-controls={legacyOptionsId}
+                  aria-describedby={exportFormat !== 'v3' ? `${legacyOptionsId}-format` : undefined}
+                  leftSection={legacyOptionsExpanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                  onClick={() => setLegacyOptionsExpanded((expanded) => !expanded)}
+                >
+                  {t('Export for older versions')}
+                  {exportFormat !== 'v3' ? (
+                    <span id={`${legacyOptionsId}-format`}>{` · ${exportFormat.toUpperCase()}`}</span>
+                  ) : null}
+                </Button>
+                {legacyOptionsExpanded ? (
+                  <Stack id={legacyOptionsId} gap="xs">
+                    <Radio.Group
+                      label={t('Backup format')}
+                      value={exportFormat}
+                      onChange={(value) => setExportFormat(value === 'v1' || value === 'v2' ? value : 'v3')}
+                    >
+                      <Stack gap="xs" mt="xs">
+                        <Radio value="v3" label={t('Current format (V3)')} />
+                        <Radio value="v2" label={t('Older versions (V2)')} />
+                        <Radio value="v1" label={t('Conversations only (V1 JSON)')} />
+                      </Stack>
+                    </Radio.Group>
+                    {exportFormat === 'v2' ? (
+                      <Text size="sm" c="dimmed">
+                        {t(
+                          'Use V2 to import this backup into an older Chatbox version. Features depend on what that version supports.'
+                        )}
+                      </Text>
+                    ) : null}
+                    {conversationsOnly ? (
+                      <Text size="sm" c="dimmed">
+                        {t(
+                          'V1 includes conversation text, history and branches. Attachments and configuration are not included.'
+                        )}
+                      </Text>
+                    ) : null}
+                  </Stack>
                 ) : null}
-              </Button>
-              {legacyOptionsExpanded ? (
-                <Stack id={legacyOptionsId} gap="xs">
-                  <Radio.Group
-                    label={t('Backup format')}
-                    value={exportFormat}
-                    onChange={(value) => setExportFormat(value === 'v1' || value === 'v2' ? value : 'v3')}
-                  >
-                    <Stack gap="xs" mt="xs">
-                      <Radio value="v3" label={t('Current format (V3)')} />
-                      <Radio value="v2" label={t('Older versions (V2)')} />
-                      <Radio value="v1" label={t('Conversations only (V1 JSON)')} />
-                    </Stack>
-                  </Radio.Group>
-                  {exportFormat === 'v2' ? (
-                    <Text size="sm" c="dimmed">
-                      {t(
-                        'Use V2 to import this backup into an older Chatbox version. Features depend on what that version supports.'
-                      )}
-                    </Text>
-                  ) : null}
-                  {conversationsOnly ? (
-                    <Text size="sm" c="dimmed">
-                      {t(
-                        'V1 includes conversation text, history and branches. Attachments and configuration are not included.'
-                      )}
-                    </Text>
-                  ) : null}
-                </Stack>
-              ) : null}
-            </Stack>
+              </Stack>
+            ) : null}
           </div>
         </div>
       </BackupDialog>
       <BackupDialog
         opened={preview !== null}
-        onClose={() => setPreview(null)}
+        onClose={closePreview}
         title={t('Import Backup')}
         footer={
           <>
-            <Button variant="default" onClick={() => setPreview(null)}>
+            <Button variant="default" onClick={closePreview}>
               {t('Cancel')}
             </Button>
             <Button onClick={() => void importBackup()}>{t('Import Backup')}</Button>
@@ -479,7 +533,7 @@ export function BackupControls() {
         {preview ? (
           <Stack gap="md">
             <Text size="sm" fw={500} style={{ overflowWrap: 'anywhere' }}>
-              {preview.file.name}
+              {preview.label}
             </Text>
             <Text size="sm">
               {[
@@ -512,7 +566,9 @@ export function BackupControls() {
       <BackupDialog
         opened={result !== null}
         onClose={() => setResult(null)}
-        title={result?.operation === 'export' ? t('Export Data') : t('Import Backup')}
+        title={
+          result?.operation === 'export' ? (result.uploaded ? t('Server backup') : t('Export Data')) : t('Import Backup')
+        }
         status
         footer={<Button onClick={() => setResult(null)}>{t('Done')}</Button>}
       >
@@ -536,9 +592,11 @@ export function BackupControls() {
             <Text fw={600} size="lg">
               {result.title}
             </Text>
-            <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
-              {result.message}
-            </Text>
+            {result.message ? (
+              <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
+                {result.message}
+              </Text>
+            ) : null}
             {result.missingResources ? (
               <Text size="sm">
                 {t(

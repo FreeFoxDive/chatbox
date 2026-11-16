@@ -190,6 +190,7 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
   { page: 'appearance', id: 'background-image', label: 'Background Image' },
   { page: 'data', id: 'recover-sessions', label: 'Recover Conversation List' },
   { page: 'data', id: 'export-data', label: 'Export Data' },
+  { page: 'data', id: 'server-backup', label: 'Server backup' },
   { page: 'data', id: 'import-data', label: 'Import Backup' },
   { page: 'data', id: 'archived-chats', label: 'Archived Chats' },
   { page: 'advanced', id: 'proxy', label: 'Network Proxy' },

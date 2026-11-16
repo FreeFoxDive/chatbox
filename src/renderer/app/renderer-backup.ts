@@ -1,27 +1,30 @@
+import { SessionRowMigration, SessionRowWriteQueue } from '@chatbox/core/application/session'
+import { type BackupExportFormat, type BackupExportResult, exportBackupStream } from '@chatbox/core/backup-export'
 import {
   type BackupHostOptions,
-  createBackupExportSource,
-  createBackupImportTarget,
   cleanupBackupImport,
   commitBackupSettings,
+  createBackupExportSource,
+  createBackupImportTarget,
 } from '@chatbox/core/backup-host'
 import { importBackup } from '@chatbox/core/backup-import'
-import { type BackupExportFormat, type BackupExportResult, exportBackupStream } from '@chatbox/core/backup-export'
 import {
   type BackupProgress,
   type BackupResult,
   type BackupSelection,
   getBackupImportPartialResult,
 } from '@chatbox/core/backup-v3'
-import { SessionRowMigration, SessionRowWriteQueue } from '@chatbox/core/application/session'
 import type { ByteSource } from '@chatbox/core/io'
 import type { KeyValueStoragePort } from '@chatbox/core/ports'
 import { v4 as uuid } from 'uuid'
-import { CurrentSessionRecordStore } from '@/adapters/CurrentSessionRecordStore'
 import { createRendererBackupResources } from '@/adapters/backup-resources'
+import { CurrentSessionRecordStore } from '@/adapters/CurrentSessionRecordStore'
 import platform from '@/platform'
+import { noteServerBackupSuccess, notifyServerBackupList } from '@/server-backup/client'
+import { loadServerBackupSession } from '@/server-backup/session'
+import { uploadBackupZip } from '@/server-backup/transfer'
 import { IndexedDBBackupWorkspace } from '@/storage/BackupWorkspace'
-import { rendererMemoryService, reloadCopilotDefinitions } from '@/stores/memoryRuntime'
+import { reloadCopilotDefinitions, rendererMemoryService } from '@/stores/memoryRuntime'
 import { rendererApplication } from './renderer-application'
 
 export interface RendererBackupSnapshot {
@@ -165,7 +168,11 @@ class RendererBackupService {
       await probe.dispose()
     }
   }
-  async export(selection: RendererBackupSelection, format: BackupExportFormat = 'v3'): Promise<BackupExportResult> {
+  private consumeExport(
+    selection: RendererBackupSelection,
+    format: BackupExportFormat,
+    consume: (bytes: AsyncIterable<Uint8Array>, signal: AbortSignal) => Promise<void>
+  ): Promise<BackupExportResult> {
     const { excludedSessionIds, ...included } = selection
     const excluded = new Set(excludedSessionIds)
     const sessionIds = included.sessionIds?.filter((id) => !excluded.has(id))
@@ -185,48 +192,76 @@ class RendererBackupService {
       const application =
         format === 'v2' ? { version: await platform.getVersion(), platform: platform.type } : undefined
       let result: BackupExportResult | undefined
-      const delivery = await platform.exporter.exportStreamingFile(
-        `chatbox-backup-${new Date().toISOString().slice(0, 10)}${format === 'v1' ? '-v1.json' : format === 'v2' ? '-v2.zip' : '.zip'}`,
-        async function* () {
-          const stream = exportBackupStream({
-            format,
-            application,
-            archiveId: options.jobId,
-            producer: 'Chatbox',
-            selection: exportSelection,
-            source: createBackupExportSource(sourceOptions, { includeGlobals: format !== 'v1' }),
-            workspace: options.workspace,
-            signal,
-            onProgress: rendererBackupService.onProgress,
-          })
-          try {
-            while (true) {
-              const entry = await stream.next()
-              if (entry.done) {
-                result = entry.value
-                return
+      const stream = exportBackupStream({
+        format,
+        application,
+        archiveId: options.jobId,
+        producer: 'Chatbox',
+        selection: exportSelection,
+        source: createBackupExportSource(sourceOptions, { includeGlobals: format !== 'v1' }),
+        workspace: options.workspace,
+        signal,
+        onProgress: rendererBackupService.onProgress,
+      })
+      try {
+        await consume(
+          {
+            async *[Symbol.asyncIterator]() {
+              while (true) {
+                const entry = await stream.next()
+                if (entry.done) {
+                  result = entry.value
+                  return
+                }
+                yield entry.value
               }
-              yield entry.value
-            }
-          } finally {
-            await stream.return(undefined as never)
-          }
+            },
+          },
+          signal
+        )
+      } finally {
+        await stream.return(undefined as never)
+      }
+      if (!result) throw new DOMException('Export was cancelled', 'AbortError')
+      return result
+    })
+  }
+  async export(selection: RendererBackupSelection, format: BackupExportFormat = 'v3'): Promise<BackupExportResult> {
+    const filename = `chatbox-backup-${new Date().toISOString().slice(0, 10)}${format === 'v1' ? '-v1.json' : format === 'v2' ? '-v2.zip' : '.zip'}`
+    let pending: { blob: Blob; filename: string } | undefined
+    const result = await this.consumeExport(selection, format, async (bytes, signal) => {
+      const delivery = await platform.exporter.exportStreamingFile(
+        filename,
+        async function* () {
+          for await (const chunk of bytes) yield chunk
         },
         format === 'v1' ? 'application/json' : 'application/zip',
         signal,
         { requiresStreaming: platform.type !== 'web' }
       )
-      if (delivery.pendingDownload) {
-        const link = document.createElement('a'),
-          url = URL.createObjectURL(delivery.pendingDownload.blob)
-        link.href = url
-        link.download = delivery.pendingDownload.filename
-        link.click()
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      }
-      if (!result) throw new DOMException('Export was cancelled', 'AbortError')
-      return result
+      pending = delivery.pendingDownload
     })
+    if (pending) {
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(pending.blob)
+      link.href = url
+      link.download = pending.filename
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    }
+    return result
+  }
+  async exportToServer(
+    selection: RendererBackupSelection,
+    options?: { automatic?: boolean; changeAtStart?: number | null }
+  ): Promise<BackupExportResult> {
+    const changeAtStart = options?.automatic
+      ? (options.changeAtStart ?? null)
+      : (await loadServerBackupSession()).lastChangeAt
+    const result = await this.consumeExport(selection, 'v3', (bytes, signal) => uploadBackupZip(bytes, signal))
+    await noteServerBackupSuccess(changeAtStart)
+    notifyServerBackupList()
+    return result
   }
   import(source: ByteSource): Promise<BackupResult> {
     return this.run('import', (options, signal) =>
