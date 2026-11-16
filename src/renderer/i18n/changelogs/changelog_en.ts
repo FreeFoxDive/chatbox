@@ -1,4 +1,10 @@
 const changelog = `
+## v1.24.9 - 2026.11.16
+1. Added self-hosted server backup on the data and backup page, including upload, listing, restore, and delete
+2. Sign in by scanning or pasting a one-time code from the backup server, or by entering the server address with a username and password
+3. Automatic server backup waits until chat has been quiet for five minutes, or thirty minutes during a long session, and does not upload again when the app quits
+
+
 ## v1.24.8 - 2026.11.14
 1. Added an Android arm64-v8a (ARM v8) release APK alongside the universal Android APK
 
