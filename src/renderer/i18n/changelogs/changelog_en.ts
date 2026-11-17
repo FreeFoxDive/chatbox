@@ -1,4 +1,9 @@
 const changelog = `
+## v1.24.10 - 2026.11.17
+1. Conversations for the same backup account now merge automatically across computers and phones, adding messages that exist on only one device
+2. Deleting a conversation or a message syncs as well, and a newer edit is not overwritten by an older backup
+
+
 ## v1.24.9 - 2026.11.16
 1. Added self-hosted server backup on the data and backup page, including upload, listing, restore, and delete
 2. Sign in by scanning or pasting a one-time code from the backup server, or by entering the server address with a username and password
