@@ -15,6 +15,8 @@ export interface ServerBackupSession {
   lastChangeAt: number | null
   lastSuccessAt: number | null
   nextAttemptAt: number | null
+  uploadedIds: string[]
+  mergedIds: string[]
 }
 
 export interface ServerBackupAuth {
@@ -35,7 +37,13 @@ export function emptyServerBackupSession(baseUrl = ''): ServerBackupSession {
     lastChangeAt: null,
     lastSuccessAt: null,
     nextAttemptAt: null,
+    uploadedIds: [],
+    mergedIds: [],
   }
+}
+
+function idList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
 export function isSignedIn(session: ServerBackupSession, now = Date.now()): boolean {
@@ -51,7 +59,10 @@ function withoutPassword(value: ServerBackupSession): ServerBackupSession {
 export async function loadServerBackupSession(): Promise<ServerBackupSession> {
   const stored = (await platform.getStoreValue(SERVER_BACKUP_SESSION_KEY)) as ServerBackupSession | null
   if (!stored || typeof stored !== 'object') return emptyServerBackupSession()
-  return { ...emptyServerBackupSession(stored.baseUrl ?? ''), ...withoutPassword(stored) }
+  const session = { ...emptyServerBackupSession(stored.baseUrl ?? ''), ...withoutPassword(stored) }
+  session.uploadedIds = idList(stored.uploadedIds)
+  session.mergedIds = idList(stored.mergedIds)
+  return session
 }
 
 let writeQueue: Promise<void> = Promise.resolve()
@@ -60,7 +71,7 @@ function enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
   const run = writeQueue.then(task, task)
   writeQueue = run.then(
     () => undefined,
-    () => undefined
+    () => undefined,
   )
   return run
 }
@@ -75,7 +86,7 @@ export function saveServerBackupSession(session: ServerBackupSession): Promise<v
 }
 
 export function updateServerBackupSession(
-  change: (session: ServerBackupSession) => ServerBackupSession | Promise<ServerBackupSession>
+  change: (session: ServerBackupSession) => ServerBackupSession | Promise<ServerBackupSession>,
 ): Promise<ServerBackupSession> {
   return enqueueWrite(async () => {
     const current = await loadServerBackupSession()
@@ -85,18 +96,18 @@ export function updateServerBackupSession(
   })
 }
 
-export function clearServerBackupSession(keep?: {
-  baseUrl?: string
-  username?: string
-}): Promise<ServerBackupSession> {
+export function clearServerBackupSession(keep?: { baseUrl?: string; username?: string }): Promise<ServerBackupSession> {
   return updateServerBackupSession((current) => {
     const next = emptyServerBackupSession(keep?.baseUrl ?? '')
+    const urlChanged = next.baseUrl !== current.baseUrl
     next.username = keep?.username ?? ''
     next.dirty = current.dirty
     next.dirtySince = current.dirtySince
     next.lastChangeAt = current.lastChangeAt
     next.lastSuccessAt = current.lastSuccessAt
     next.nextAttemptAt = current.nextAttemptAt
+    next.uploadedIds = urlChanged ? [] : current.uploadedIds
+    next.mergedIds = urlChanged ? [] : current.mergedIds
     return next
   })
 }
@@ -111,5 +122,7 @@ export function applyAuth(session: ServerBackupSession, auth: ServerBackupAuth):
     refreshToken: auth.refreshToken,
     refreshExpiresAt: auth.refreshExpiresAt,
     nextAttemptAt: null,
+    uploadedIds: auth.baseUrl && auth.baseUrl !== session.baseUrl ? [] : session.uploadedIds,
+    mergedIds: auth.baseUrl && auth.baseUrl !== session.baseUrl ? [] : session.mergedIds,
   }
 }

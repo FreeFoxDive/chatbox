@@ -12,6 +12,7 @@ import {
   type BackupProgress,
   type BackupResult,
   type BackupSelection,
+  type SyncTombstone,
   getBackupImportPartialResult,
 } from '@chatbox/core/backup-v3'
 import type { ByteSource } from '@chatbox/core/io'
@@ -22,6 +23,7 @@ import { CurrentSessionRecordStore } from '@/adapters/CurrentSessionRecordStore'
 import platform from '@/platform'
 import { noteServerBackupSuccess, notifyServerBackupList } from '@/server-backup/client'
 import { loadServerBackupSession } from '@/server-backup/session'
+import { loadServerBackupTombstones } from '@/server-backup/tombstones'
 import { uploadBackupZip } from '@/server-backup/transfer'
 import { IndexedDBBackupWorkspace } from '@/storage/BackupWorkspace'
 import { reloadCopilotDefinitions, rendererMemoryService } from '@/stores/memoryRuntime'
@@ -56,7 +58,7 @@ function host(jobId: string, workspace: IndexedDBBackupWorkspace): BackupHostOpt
       getRevision: (id) => rows.getRevision(id),
       writeRows: (snapshot, revision) => rows.writeRows(snapshot, revision),
     },
-    new SessionRowWriteQueue((_id, action) => action())
+    new SessionRowWriteQueue((_id, action) => action()),
   )
   return {
     jobId,
@@ -85,6 +87,16 @@ class RendererBackupService {
   private controller: AbortController | null = null
   private listeners = new Set<() => void>()
   private lastProgressAt = 0
+  private gate: Promise<void> = Promise.resolve()
+  /** Serializes automatic merges with manual export, upload, and restore. */
+  runLocked<T>(action: () => Promise<T>): Promise<T> {
+    const previous = this.gate
+    let release: () => void = () => undefined
+    this.gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    return previous.then(action, action).finally(() => release())
+  }
   getSnapshot = () => this.snapshot
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
@@ -115,7 +127,7 @@ class RendererBackupService {
   }
   async listSessions(
     after: number | null,
-    search: string
+    search: string,
   ): Promise<{ sessions: Array<{ id: string; name: string }>; next: number | null; total: number }> {
     const meta = platform.getSessionMetaStorage()
     await meta.initialize()
@@ -171,7 +183,8 @@ class RendererBackupService {
   private consumeExport(
     selection: RendererBackupSelection,
     format: BackupExportFormat,
-    consume: (bytes: AsyncIterable<Uint8Array>, signal: AbortSignal) => Promise<void>
+    consume: (bytes: AsyncIterable<Uint8Array>, signal: AbortSignal) => Promise<void>,
+    tombstones?: SyncTombstone[],
   ): Promise<BackupExportResult> {
     const { excludedSessionIds, ...included } = selection
     const excluded = new Set(excludedSessionIds)
@@ -202,6 +215,7 @@ class RendererBackupService {
         workspace: options.workspace,
         signal,
         onProgress: rendererBackupService.onProgress,
+        tombstones,
       })
       try {
         await consume(
@@ -217,7 +231,7 @@ class RendererBackupService {
               }
             },
           },
-          signal
+          signal,
         )
       } finally {
         await stream.return(undefined as never)
@@ -237,7 +251,7 @@ class RendererBackupService {
         },
         format === 'v1' ? 'application/json' : 'application/zip',
         signal,
-        { requiresStreaming: platform.type !== 'web' }
+        { requiresStreaming: platform.type !== 'web' },
       )
       pending = delivery.pendingDownload
     })
@@ -253,13 +267,21 @@ class RendererBackupService {
   }
   async exportToServer(
     selection: RendererBackupSelection,
-    options?: { automatic?: boolean; changeAtStart?: number | null }
+    options?: { automatic?: boolean; changeAtStart?: number | null },
   ): Promise<BackupExportResult> {
-    const changeAtStart = options?.automatic
-      ? (options.changeAtStart ?? null)
-      : (await loadServerBackupSession()).lastChangeAt
-    const result = await this.consumeExport(selection, 'v3', (bytes, signal) => uploadBackupZip(bytes, signal))
-    await noteServerBackupSuccess(changeAtStart)
+    const session = await loadServerBackupSession()
+    const changeAtStart = options?.automatic ? (options.changeAtStart ?? null) : session.lastChangeAt
+    const tombstones = await loadServerBackupTombstones(session.baseUrl)
+    let backupId: string | undefined
+    const result = await this.consumeExport(
+      selection,
+      'v3',
+      async (bytes, signal) => {
+        backupId = await uploadBackupZip(bytes, signal)
+      },
+      tombstones,
+    )
+    await noteServerBackupSuccess(changeAtStart, backupId)
     notifyServerBackupList()
     return result
   }
@@ -285,12 +307,18 @@ class RendererBackupService {
         }),
         signal,
         onProgress: this.onProgress,
-      })
+      }),
     )
   }
-  private async run<T extends Pick<BackupResult, 'cleanupPending' | 'refreshPending'>>(
+  private run<T extends Pick<BackupResult, 'cleanupPending' | 'refreshPending'>>(
     operation: 'export' | 'import',
-    action: (options: BackupHostOptions, signal: AbortSignal) => Promise<T>
+    action: (options: BackupHostOptions, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    return this.runLocked(() => this.runUnlocked(operation, action))
+  }
+  private async runUnlocked<T extends Pick<BackupResult, 'cleanupPending' | 'refreshPending'>>(
+    operation: 'export' | 'import',
+    action: (options: BackupHostOptions, signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
     if (this.snapshot) throw new Error('A backup operation is already in progress')
     const controller = new AbortController()

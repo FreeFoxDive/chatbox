@@ -28,11 +28,17 @@ async function readError(response: Response): Promise<string> {
   }
 }
 
+function backupId(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object' || !('id' in body)) return undefined
+  const id = (body as { id?: unknown }).id
+  return typeof id === 'string' && id ? id : undefined
+}
+
 export async function uploadBackupZip(
   bytes: AsyncIterable<Uint8Array>,
   signal: AbortSignal,
-  filename = backupFilename()
-): Promise<void> {
+  filename = backupFilename(),
+): Promise<string | undefined> {
   const session = await ensureServerBackupAccess()
   const ipc = desktopIpc()
   if (ipc) {
@@ -47,18 +53,18 @@ export async function uploadBackupZip(
       let accessToken = session.accessToken
       let result = (await ipc.invoke('server-backup:upload', token, session.baseUrl, accessToken, filename)) as {
         status: number
-        body: { error?: string }
+        body: { error?: string; id?: string }
       }
       if (result.status === 401) {
         accessToken = (await refreshServerBackupSession()).accessToken
         result = (await ipc.invoke('server-backup:upload', token, session.baseUrl, accessToken, filename)) as {
           status: number
-          body: { error?: string }
+          body: { error?: string; id?: string }
         }
       }
       if (result.status >= 300)
         throw new ServerBackupError(result.body.error || 'Could not reach the backup server.', result.status)
-      return
+      return backupId(result.body)
     } catch (error) {
       await ipc.invoke('server-backup:cancel', token).catch(() => undefined)
       throw error
@@ -77,6 +83,7 @@ export async function uploadBackupZip(
     signal,
   })
   if (!response.ok) throw new ServerBackupError(await readError(response), response.status)
+  return backupId(await response.json().catch(() => undefined))
 }
 
 export interface DownloadedBackup extends ByteSource {

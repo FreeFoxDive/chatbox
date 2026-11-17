@@ -188,13 +188,15 @@ export function markServerBackupDirty(): Promise<void> {
   })).then(() => undefined)
 }
 
-export function noteServerBackupSuccess(changeAtStart: number | null): Promise<void> {
+export function noteServerBackupSuccess(changeAtStart: number | null, backupId?: string): Promise<void> {
   return updateServerBackupSession((session) => ({
     ...session,
     lastSuccessAt: Date.now(),
     nextAttemptAt: null,
     dirty: session.lastChangeAt === changeAtStart ? false : session.dirty,
     dirtySince: session.lastChangeAt === changeAtStart ? null : session.dirtySince,
+    uploadedIds:
+      backupId && !session.uploadedIds.includes(backupId) ? [...session.uploadedIds, backupId] : session.uploadedIds,
   })).then(() => undefined)
 }
 

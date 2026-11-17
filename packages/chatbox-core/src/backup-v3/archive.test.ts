@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { unzipSync, zipSync } from 'fflate'
 import type { ByteSink, ClosableByteSource } from '../io'
 import { deriveMessageFacts } from '../session/message-facts'
-import { exportBackupV3, exportBackupV3Stream, importBackupV3, readBackupV3Manifest } from './archive'
+import {
+  exportBackupV3,
+  exportBackupV3Stream,
+  importBackupV3,
+  readBackupSyncSnapshot,
+  readBackupV3Manifest,
+} from './archive'
 import { getBackupImportPartialResult } from './errors'
 import { trackedNodeCodec } from './codec.test-helpers'
 import { backupResourcePath, backupSessionPath } from './layout'
@@ -138,7 +144,8 @@ async function archive(
     codec?: BackupCodec
     limits?: Partial<BackupLimits>
     openResource?: BackupExportSource['openResource']
-  } = {}
+    tombstones?: import('./tombstones').SyncTombstone[]
+  } = {},
 ) {
   let bytes: Uint8Array = new Uint8Array()
   const workspace = new Workspace()
@@ -159,6 +166,7 @@ async function archive(
     signal: options.abort,
     codec: options.codec,
     limits: options.limits,
+    tombstones: options.tombstones,
     source: {
       async *records() {
         yield* records
@@ -266,7 +274,7 @@ describe('V3 row archive', () => {
         })
       }
       await expect(
-        importBackupV3({ source: source(bytes), workspace: new Workspace(), target, codec: probe.codec })
+        importBackupV3({ source: source(bytes), workspace: new Workspace(), target, codec: probe.codec }),
       ).rejects.toThrow(`${failure} failed`)
       expect(target.cleaned).toBe(true)
       expect(target.records).toHaveLength(0)
@@ -344,7 +352,7 @@ describe('V3 row archive', () => {
     })
     const entries = unzipSync(bytes)
     expect(JSON.parse(decoder.decode(entries['settings.json']))).toEqual(
-      globals[0].type === 'global' ? globals[0].value : null
+      globals[0].type === 'global' ? globals[0].value : null,
     )
     expect(JSON.parse(decoder.decode(entries['copilots.json']))).toEqual([
       { id: 'copilot', name: 'Assistant', prompt: 'Hello' },
@@ -370,7 +378,7 @@ describe('V3 row archive', () => {
     }
     await importBackupV3({ source: source(bytes), workspace: new Workspace(), target })
     expect(context?.includedGlobalKeys).toEqual(
-      expect.arrayContaining(['settings', 'myCopilots', ...Object.keys(shared)])
+      expect.arrayContaining(['settings', 'myCopilots', ...Object.keys(shared)]),
     )
     expect(context?.includedGlobalKeys).toHaveLength(10)
     const actual = target.records.filter((record) => record.type === 'global')
@@ -429,10 +437,10 @@ describe('V3 row archive', () => {
   it('enforces entry and structured-data budgets across every conversation and configuration file', async () => {
     const one = await archive(fixture('A'))
     await expect(
-      archive([...fixture('A'), ...fixture('B')], { limits: { maxDataBytes: one.result.complete.dataBytes + 10 } })
+      archive([...fixture('A'), ...fixture('B')], { limits: { maxDataBytes: one.result.complete.dataBytes + 10 } }),
     ).rejects.toThrow('data exceeds')
     await expect(
-      archive([...fixture('A'), ...fixture('B')], { limits: { maxEntries: one.result.complete.entryCount } })
+      archive([...fixture('A'), ...fixture('B')], { limits: { maxEntries: one.result.complete.entryCount } }),
     ).rejects.toThrow('too many ZIP entries')
     const two = await archive([...fixture('A'), ...fixture('B')])
     await expect(
@@ -441,7 +449,7 @@ describe('V3 row archive', () => {
         workspace: new Workspace(),
         target: new Target(),
         limits: { maxDataBytes: one.result.complete.dataBytes + 10 },
-      })
+      }),
     ).rejects.toThrow('data exceeds')
   })
 
@@ -464,7 +472,7 @@ describe('V3 row archive', () => {
         damaged = mutate(bytes, (entries) => {
           const header = failure === 'extra-header-malformed' ? JSON.stringify(fixture('B')[0]) + '\n' : ''
           entries['sessions/B.jsonl'] = encoder.encode(
-            decoder.decode(entries['sessions/B.jsonl']) + header + '{bad json\n'
+            decoder.decode(entries['sessions/B.jsonl']) + header + '{bad json\n',
           )
         })
       const target = new Target()
@@ -477,7 +485,7 @@ describe('V3 row archive', () => {
         pending = []
       }
       const error = await importBackupV3({ source: source(damaged), workspace: new Workspace(), target }).catch(
-        (error: unknown) => error
+        (error: unknown) => error,
       )
       expect(getBackupImportPartialResult(error)?.importReport).toMatchObject({
         importedSessions: 1,
@@ -485,7 +493,7 @@ describe('V3 row archive', () => {
       })
       expect(target.records.filter((row) => row.type === 'session').map((row) => row.session.id)).toEqual(['A'])
       expect(target.cleaned).toBe(true)
-    }
+    },
   )
 
   it('supports empty selections and preview without staging or resource decoding', async () => {
@@ -499,7 +507,7 @@ describe('V3 row archive', () => {
 
   it('rejects an unselected session at the source boundary', async () => {
     await expect(archive(fixture('B'), { selection: { ...selection, sessionIds: ['A'] } })).rejects.toThrow(
-      'unselected'
+      'unselected',
     )
   })
 
@@ -512,7 +520,7 @@ describe('V3 row archive', () => {
           entries['resources/000000.txt'] = encoder.encode('edited attachment with a different byte length')
         if (kind === 'data')
           entries['sessions/A.jsonl'] = encoder.encode(
-            decoder.decode(entries['sessions/A.jsonl']).replace('你好', 'edited message')
+            decoder.decode(entries['sessions/A.jsonl']).replace('你好', 'edited message'),
           )
         if (kind === 'complete')
           entries['complete.json'] = encoder.encode(
@@ -523,7 +531,7 @@ describe('V3 row archive', () => {
               resourceBytes: 1,
               entryCount: 1,
               uncompressedBytes: 1,
-            })
+            }),
           )
       })
       const target = new Target()
@@ -533,7 +541,7 @@ describe('V3 row archive', () => {
       expect(result.complete.dataBytes).toBe(
         Object.entries(unzipSync(edited))
           .filter(([path]) => path.endsWith('.jsonl') || path === 'session-settings.json')
-          .reduce((sum, [, bytes]) => sum + bytes.length, 0)
+          .reduce((sum, [, bytes]) => sum + bytes.length, 0),
       )
       expect(result.importReport).toMatchObject({
         importedSessions: 1,
@@ -542,7 +550,7 @@ describe('V3 row archive', () => {
         issueCount: 0,
       })
       if (kind === 'resource') expect(target.descriptors[0].size).toBe(unzipSync(edited)['resources/000000.txt'].length)
-    }
+    },
   )
 
   it.each(['missing-resources-index', 'extra-entry', 'invalid-record'] as const)(
@@ -557,7 +565,7 @@ describe('V3 row archive', () => {
       const target = new Target()
       await expect(importBackupV3({ source: source(invalid), workspace: new Workspace(), target })).rejects.toThrow()
       expect(target.records).toHaveLength(0)
-    }
+    },
   )
 
   it('retains messages with undeclared resources and reports both missing and unindexed attachments', async () => {
@@ -603,7 +611,7 @@ describe('V3 row archive', () => {
         openResource: async () => {
           throw new Error('Resource read failed')
         },
-      })
+      }),
     ).rejects.toThrow('Resource read failed')
   })
 
@@ -626,7 +634,7 @@ describe('V3 row archive', () => {
   it('imports an archive repacked with ZIP entries in alphabetical order', async () => {
     const { bytes } = await archive()
     const reordered = zipSync(
-      Object.fromEntries(Object.entries(unzipSync(bytes)).sort(([left], [right]) => left.localeCompare(right)))
+      Object.fromEntries(Object.entries(unzipSync(bytes)).sort(([left], [right]) => left.localeCompare(right))),
     )
     expect(Object.keys(unzipSync(reordered))[0]).toBe('complete.json')
     expect((await readBackupV3Manifest(source(reordered))).archiveId).toBe('archive-1')
@@ -651,7 +659,7 @@ describe('V3 row archive', () => {
             .decode(bytes)
             .trim()
             .split('\n')
-            .map((line) => JSON.parse(line) as BackupRecord)
+            .map((line) => JSON.parse(line) as BackupRecord),
         )
       const replacement = rows.filter((row) => row.type !== 'message' || row.message.sessionId !== 'A')
       const last = rows.at(-1)
@@ -672,7 +680,7 @@ describe('V3 row archive', () => {
             ? row.session.id === id
             : row.type === 'thread'
               ? row.thread.sessionId === id
-              : row.type === 'message' && row.message.sessionId === id
+              : row.type === 'message' && row.message.sessionId === id,
         )
         entries[`sessions/${id}.jsonl`] = encoder.encode(own.map((row) => JSON.stringify(row)).join('\n') + '\n')
       }
@@ -682,7 +690,7 @@ describe('V3 row archive', () => {
     expect(result.complete.counts.message).toBe(3)
     expect(result.importReport?.importedMessages).toBe(3)
     expect(
-      target.records.filter((record) => record.type === 'message').map((record) => record.message.messageId)
+      target.records.filter((record) => record.type === 'message').map((record) => record.message.messageId),
     ).toEqual(['B-m', 'B-added-1', 'B-added-2'])
   })
 
@@ -717,7 +725,7 @@ describe('V3 row archive', () => {
     expect(result.importReport?.issues.map((issue) => issue.code)).toEqual(['missing-session', 'missing-session'])
     expect(result.complete.counts.message).toBe(4)
     expect(
-      target.records.filter((record) => record.type === 'message').map((record) => record.message.messageId)
+      target.records.filter((record) => record.type === 'message').map((record) => record.message.messageId),
     ).toEqual(['B-m', 'C-m', 'C-m'])
   })
 
@@ -780,7 +788,7 @@ describe('V3 row archive', () => {
       if (valid?.type !== 'message') throw new Error('fixture')
       rows.push(
         { ...valid, message: { ...valid.message, message: { ...valid.message.message, id: 'wrong-id' } } },
-        valid
+        valid,
       )
       entries['sessions/A.jsonl'] = encoder.encode(rows.map((row) => JSON.stringify(row)).join('\n') + '\n')
     })
@@ -894,7 +902,7 @@ describe('V3 row archive', () => {
     expect(changed).toBe(true)
     const target = new Target()
     const error = await importBackupV3({ source: source(damaged), workspace: new Workspace(), target }).catch(
-      (error: unknown) => error
+      (error: unknown) => error,
     )
     expect(error).toMatchObject({ message: 'ZIP entry CRC mismatch: resources/000001.txt' })
     expect(getBackupImportPartialResult(error)?.importReport).toMatchObject({
@@ -917,7 +925,7 @@ describe('V3 row archive', () => {
       return append(records)
     }
     const error = await importBackupV3({ source: source(edited), workspace: new Workspace(), target }).catch(
-      (error: unknown) => error
+      (error: unknown) => error,
     )
     expect(getBackupImportPartialResult(error)?.importReport).toMatchObject({
       importedSessions: 1,
@@ -949,7 +957,7 @@ describe('V3 row archive', () => {
         workspace: new Workspace(),
         target: new Target(),
         signal: controller.signal,
-      })
+      }),
     ).rejects.toThrow()
     await expect(
       importBackupV3({
@@ -957,7 +965,7 @@ describe('V3 row archive', () => {
         workspace: new Workspace(),
         target: new Target(),
         limits: { maxRecordBytes: 32 },
-      })
+      }),
     ).rejects.toThrow('byte budget')
   })
 
@@ -990,7 +998,7 @@ describe('V3 row archive', () => {
       expect(target.records[2]).toMatchObject({
         message: { message: { contentParts: record.message.message.contentParts } },
       })
-    }
+    },
   )
 
   it('removes device attachment handles, preserves content references and records a warning', async () => {
@@ -1125,7 +1133,7 @@ describe('V3 row archive', () => {
       throw new Error('cleanup failed')
     }
     await expect(
-      importBackupV3({ source: source(bytes), workspace: failedWorkspace, target: failedTarget })
+      importBackupV3({ source: source(bytes), workspace: failedWorkspace, target: failedTarget }),
     ).rejects.toThrow('publish failed')
     expect(failedWorkspace.disposed).toBe(false)
   })
@@ -1213,9 +1221,32 @@ describe('V3 row archive', () => {
             }
           },
         },
-      })
+      }),
     ).rejects.toThrow('disk full')
     expect(opened).toBe(true)
     expect(closed).toBe(true)
+  })
+
+  it('stores deletion markers without changing a manual import', async () => {
+    const tombstones = [{ kind: 'message' as const, sessionId: 'A', objectId: 'A-m', deletedAt: 5 }]
+    const packed = await archive(fixture(), { tombstones })
+    const snapshot = await readBackupSyncSnapshot(source(packed.bytes))
+    expect(snapshot.tombstones).toEqual(tombstones)
+    expect(snapshot.sessions.map((item) => item.session.id)).toEqual(['A'])
+    const target = new Target()
+    await importBackupV3({ source: source(packed.bytes), workspace: new Workspace(), target })
+    expect(target.prepared).toBe(true)
+    expect(target.records.some((record) => record.type === 'message')).toBe(true)
+  })
+
+  it('rejects a snapshot without a matching completion record', async () => {
+    const packed = await archive(fixture())
+    const files = unzipSync(packed.bytes)
+    delete files['complete.json']
+    await expect(readBackupSyncSnapshot(source(zipSync(files)))).rejects.toThrow('Backup archive is incomplete')
+    files['complete.json'] = new TextEncoder().encode(JSON.stringify({ archiveId: 'other-archive' }))
+    const again = unzipSync(packed.bytes)
+    again['complete.json'] = files['complete.json']
+    await expect(readBackupSyncSnapshot(source(zipSync(again)))).rejects.toThrow('Backup archive is incomplete')
   })
 })

@@ -1,4 +1,5 @@
 import type { ByteSink, ByteSource, ClosableByteSource } from '../io'
+import type { SyncTombstone } from './tombstones'
 import type { MessageRow, SessionRowRecord, ThreadRow } from '../session/session-tree/types'
 
 export type BackupSession = Omit<SessionRowRecord, 'storageFormat' | 'rowFormatVersion' | 'rowAuthority'>
@@ -121,7 +122,7 @@ export interface BackupImportTarget {
     manifest: BackupManifest,
     onIssue?: BackupImportIssueReporter,
     signal?: AbortSignal,
-    context?: BackupImportContext
+    context?: BackupImportContext,
   ): Promise<void>
   appendRecords(records: BackupBusinessRecord[]): Promise<void>
   /** Closing the sink publishes the complete resource atomically. */
@@ -160,6 +161,8 @@ export interface ExportBackupV3Options extends BackupOptions {
   source: BackupExportSource
   workspace: BackupWorkspace
   output: ByteSink
+  /** Server backups carry deletion markers. Manual exports omit the file. */
+  tombstones?: SyncTombstone[]
 }
 export interface ImportBackupV3Options extends BackupOptions {
   source: ByteSource

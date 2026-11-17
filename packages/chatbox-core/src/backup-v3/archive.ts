@@ -29,13 +29,17 @@ import {
   resolveBackupLimits,
   settleBackupRecord,
 } from './schema'
-import { countChunks, decodeJson, decodeJsonLines, encodeJson, encodeLine, sourceChunks } from './streams'
+import { countChunks, decodeJson, decodeJsonLines, encodeJson, encodeLine, singleChunk, sourceChunks } from './streams'
+import { parseSyncTombstones, SYNC_TOMBSTONES_PATH, type SyncTombstone } from './tombstones'
 import type {
   BackupBusinessRecord,
   BackupComplete,
   BackupImportIssueReporter,
   BackupImportReport,
+  BackupMessage,
+  BackupSession,
   BackupStatistics,
+  BackupThread,
   BackupLimits,
   BackupManifest,
   BackupOptions,
@@ -75,7 +79,10 @@ function zipOptions(limits: BackupLimits, signal?: AbortSignal): ZipReadOptions 
     },
     entryLimits: (path) => ({
       maxEntryUncompressedBytes:
-        path.startsWith('sessions/') || path === 'resources.jsonl' || path === 'warnings.jsonl'
+        path.startsWith('sessions/') ||
+        path === 'resources.jsonl' ||
+        path === 'warnings.jsonl' ||
+        path === SYNC_TOMBSTONES_PATH
           ? limits.maxDataBytes
           : isConfigPath(path)
             ? limits.maxGlobalBytes
@@ -122,7 +129,9 @@ export async function exportBackupV3(options: ExportBackupV3Options): Promise<Ba
     dataBytes += added
     if (dataBytes > limits.maxDataBytes) throw new Error('Backup data exceeds its byte budget')
   }
-  const entryCount = () => resourceCount + counts.session + configurationCount + (counts.warning ? 1 : 0) + 3
+  const tombstoneEntry = options.tombstones ? 1 : 0
+  const entryCount = () =>
+    resourceCount + counts.session + configurationCount + (counts.warning ? 1 : 0) + tombstoneEntry + 3
   const checkEntries = () => {
     if (entryCount() > limits.maxEntries) throw new Error('Backup contains too many ZIP entries')
   }
@@ -243,7 +252,7 @@ export async function exportBackupV3(options: ExportBackupV3Options): Promise<Ba
                 size = value
               },
               signal,
-              (bytes) => notify({ phase: 'resources', resources: counts.resource, bytes: resourceBytes + bytes })
+              (bytes) => notify({ phase: 'resources', resources: counts.resource, bytes: resourceBytes + bytes }),
             ),
           }
         } finally {
@@ -277,6 +286,11 @@ export async function exportBackupV3(options: ExportBackupV3Options): Promise<Ba
       for await (const { key, value } of workspace.entries('session-files'))
         yield { path: key, data: temporaryFile(value) }
       if (counts.warning) yield { path: 'warnings.jsonl', data: temporaryFile('warnings.jsonl') }
+      if (options.tombstones) {
+        const bytes = encodeJson(parseSyncTombstones(options.tombstones))
+        checkData(bytes.length)
+        yield { path: SYNC_TOMBSTONES_PATH, data: bytes }
+      }
       complete = {
         archiveId: manifest.archiveId,
         counts,
@@ -352,13 +366,14 @@ async function scanArchive(source: ByteSource, options: BackupOptions, limits: B
           path !== 'manifest.json' &&
           path !== 'complete.json' &&
           path !== 'warnings.jsonl' &&
+          path !== SYNC_TOMBSTONES_PATH &&
           !isConfigPath(path) &&
           !RESOURCE_PATH_PATTERN.test(path)
         )
           throw new Error(`Unexpected backup ZIP entry: ${path}`)
         return path === 'manifest.json'
       },
-    }
+    },
   )
   if (!manifest || !hasResources) throw new Error('Backup control files are missing')
   return { manifest, manifestBytes, entries }
@@ -444,7 +459,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
         includedGlobalKeys.push(...configurationKeys(entry.path, value, scanned!.manifest.selection))
         configurations.push({ path: entry.path, value })
       },
-      { ...zipOptions(limits, signal), filter: isConfigPath }
+      { ...zipOptions(limits, signal), filter: isConfigPath },
     )
     started = true
     await target.begin(scanned.manifest, reportIssue, signal, { includedGlobalKeys })
@@ -460,7 +475,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
         (size) => {
           addDataBytes(size - processed)
           processed = size
-        }
+        },
       )
     }
     await readZipFileEntries(
@@ -477,7 +492,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
             trackedData(entry.data, entry.path),
             limits.maxRecordBytes,
             signal,
-            options.codec
+            options.codec,
           )) {
             const record = parseBackupRecord(line.value)
             if (record.type !== 'resource') throw new Error('Resource index contains a non-resource record')
@@ -499,7 +514,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
             await workspace.put('resource-paths', record.path, record.resourceId)
           }
         },
-      }
+      },
     )
     await readZipFileEntries(
       source,
@@ -526,7 +541,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
               currentBytes = size
               checkTotal(scanned!.manifestBytes + dataBytes + resourceBytes, limits)
               notify({ phase: 'resources', resources, bytes: resourceBytes })
-            }
+            },
           )
           if (value === null) {
             for await (const _ of chunks) {
@@ -558,7 +573,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
           }
           notify({ phase: 'resources', resources: ++resources, bytes: resourceBytes })
         },
-      }
+      },
     )
     let batch: BackupBusinessRecord[] = []
     let batchBytes = 0
@@ -624,7 +639,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
             trackedData(entry.data, entry.path),
             limits.maxRecordBytes,
             signal,
-            options.codec
+            options.codec,
           )) {
             const record = parseBackupRecord(line.value)
             if (record.type !== 'session' && record.type !== 'thread' && record.type !== 'message')
@@ -674,7 +689,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
           await flush()
           if (hasHeader) await target.prepare()
         },
-      }
+      },
     )
     await readZipFileEntries(
       source,
@@ -690,7 +705,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
             trackedData(entry.data, entry.path),
             limits.maxRecordBytes,
             signal,
-            options.codec
+            options.codec,
           )) {
             const record = parseBackupRecord(line.value)
             if (record.type !== 'warning') throw new Error('Warning file contains a non-warning record')
@@ -698,7 +713,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
             await order.accept(record)
           }
         },
-      }
+      },
     )
     const reportMissing = async (key: string, context: { objectId?: string; sessionId?: string } = {}) => {
       if (
@@ -725,7 +740,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
       (entry) => {
         complete = parseBackupComplete(decodeJson(entry.data, options.codec))
       },
-      { ...zipOptions(limits, signal), filter: (path) => path === 'complete.json' }
+      { ...zipOptions(limits, signal), filter: (path) => path === 'complete.json' },
     )
     if (!complete) throw new Error('Backup completion marker is missing')
     if (complete.archiveId !== scanned.manifest.archiveId) throw new Error('Backup archive IDs do not match')
@@ -744,7 +759,7 @@ export async function importBackupV3(options: ImportBackupV3Options): Promise<Ba
 
 /** Pull-driven adapter for hosts whose file exporter consumes an async byte iterator. */
 export async function* exportBackupV3Stream(
-  options: Omit<ExportBackupV3Options, 'output'>
+  options: Omit<ExportBackupV3Options, 'output'>,
 ): AsyncGenerator<Uint8Array, BackupResult> {
   const controller = new AbortController()
   const abort = () => controller.abort(options.signal?.reason)
@@ -782,7 +797,7 @@ export async function* exportBackupV3Stream(
       },
       (reason: unknown) => {
         error = reason
-      }
+      },
     )
     .finally(() => {
       finished = true
@@ -814,4 +829,116 @@ export async function* exportBackupV3Stream(
     await job
     options.signal?.removeEventListener('abort', abort)
   }
+}
+
+export interface BackupSyncSession {
+  session: BackupSession
+  meta?: { sortOrder: number; createdAt: number }
+  threads: BackupThread[]
+  messages: BackupMessage[]
+}
+
+export interface BackupSyncSnapshot {
+  tombstones: SyncTombstone[]
+  sessions: BackupSyncSession[]
+  resources: BackupResourceRecord[]
+}
+
+/** Reads conversations, deletion markers, and resource declarations. Settings files are ignored. */
+export async function readBackupSyncSnapshot(
+  source: ByteSource,
+  options: BackupOptions = {},
+): Promise<BackupSyncSnapshot> {
+  const limits = resolveBackupLimits(options.limits)
+  const sessions = new Map<string, BackupSyncSession>()
+  let tombstones: SyncTombstone[] = []
+  const resources: BackupResourceRecord[] = []
+  let manifest: BackupManifest | undefined
+  let complete: BackupComplete | undefined
+  await readZipFileEntries(
+    source,
+    async (entry) => {
+      if (entry.path === 'manifest.json') {
+        manifest = parseBackupManifest(decodeJson(entry.data, options.codec))
+        return
+      }
+      if (entry.path === 'complete.json') {
+        complete = parseBackupComplete(decodeJson(entry.data, options.codec))
+        return
+      }
+      if (entry.path === SYNC_TOMBSTONES_PATH) {
+        tombstones = parseSyncTombstones(decodeJson(entry.data, options.codec))
+        return
+      }
+      if (entry.path === 'resources.jsonl') {
+        for await (const line of decodeJsonLines(
+          singleChunk(entry.data),
+          limits.maxRecordBytes,
+          options.signal,
+          options.codec,
+        )) {
+          const record = parseBackupRecord(line.value)
+          if (record.type === 'resource') resources.push(record)
+        }
+        return
+      }
+      if (!entry.path.startsWith('sessions/')) return
+      let current: BackupSyncSession | undefined
+      for await (const line of decodeJsonLines(
+        singleChunk(entry.data),
+        limits.maxRecordBytes,
+        options.signal,
+        options.codec,
+      )) {
+        const parsed = parseBackupRecord(line.value)
+        if (parsed.type === 'resource' || parsed.type === 'warning' || parsed.type === 'global')
+          throw new Error('Conversation file contains a non-conversation record')
+        const record = settleBackupRecord(parsed)
+        if (record.type === 'session') {
+          current = { session: record.session, meta: record.meta, threads: [], messages: [] }
+          sessions.set(record.session.id, current)
+        } else if (record.type === 'thread' && current) current.threads.push(record.thread)
+        else if (record.type === 'message' && current) current.messages.push(record.message)
+      }
+    },
+    {
+      ...zipOptions(limits, options.signal),
+      filter: (path) =>
+        path === 'manifest.json' ||
+        path === 'complete.json' ||
+        path === SYNC_TOMBSTONES_PATH ||
+        path === 'resources.jsonl' ||
+        path.startsWith('sessions/'),
+    },
+  )
+  if (!manifest || manifest.formatVersion !== 3 || !complete || complete.archiveId !== manifest.archiveId)
+    throw new Error('Backup archive is incomplete')
+  return { tombstones, sessions: [...sessions.values()], resources }
+}
+
+/** Copies one ZIP resource into a sink. The sink is closed by the caller. */
+export async function writeBackupResource(
+  source: ByteSource,
+  path: string,
+  output: ByteSink,
+  options: BackupOptions = {},
+): Promise<void> {
+  const limits = resolveBackupLimits(options.limits)
+  let found = false
+  await readZipFileEntries(
+    source,
+    () => {
+      throw new Error('Expected a streaming resource')
+    },
+    {
+      ...zipOptions(limits, options.signal),
+      filter: (entry) => entry === path,
+      streamEntry: () => true,
+      onStreamEntry: async (entry) => {
+        found = true
+        for await (const chunk of entry.data) await output.write(chunk)
+      },
+    },
+  )
+  if (!found) throw new Error('Backup resource is missing')
 }

@@ -2,8 +2,10 @@ import { rendererApplication } from '@/app/renderer-application'
 import { rendererBackupService } from '@/app/renderer-backup'
 import { settingsStore } from '@/stores/settingsStore'
 import { markServerBackupDirty, noteServerBackupFailure } from './client'
+import { mergeNextRemoteBackup } from './merge'
 import { QUIET_MS, shouldAutoBackup } from './protocol'
 import { isSignedIn, loadServerBackupSession } from './session'
+import { backupSyncSuppressed, captureDeleteTombstones } from './tombstones'
 
 const CONTENT_EVENTS = new Set([
   'session-command-committed',
@@ -24,7 +26,7 @@ export function startServerBackupScheduler(): () => void {
   }
 
   const unsubscribeSettings = settingsStore.subscribe((state) => {
-    if (state.hydrationStatus !== 'hydrated') return
+    if (backupSyncSuppressed() || state.hydrationStatus !== 'hydrated') return
     const encoded = JSON.stringify(state.getSettings())
     if (!hydrated) {
       hydrated = true
@@ -36,46 +38,77 @@ export function startServerBackupScheduler(): () => void {
   })
 
   const unsubscribeSessions = rendererApplication.sessionEvents.subscribe((event) => {
-    if (CONTENT_EVENTS.has(event.type)) dirty()
+    if (event.type === 'session-deleted' || event.type === 'session-command-committed') {
+      void captureDeleteTombstones(event).finally(() => {
+        if (!backupSyncSuppressed() && CONTENT_EVENTS.has(event.type)) dirty()
+      })
+      return
+    }
+    if (!backupSyncSuppressed() && CONTENT_EVENTS.has(event.type)) dirty()
   })
 
-  const tick = () => {
-    if (busy) return
-    void (async () => {
-      const session = await loadServerBackupSession()
-      const run = shouldAutoBackup({
-        now: Date.now(),
-        dirty: session.dirty,
-        lastChangeAt: session.lastChangeAt,
-        lastSuccessAt: session.lastSuccessAt,
-        dirtySince: session.dirtySince,
-        nextAttemptAt: session.nextAttemptAt,
-        suppressUntil,
-        generating: rendererBackupService.getGeneratingSessionIds().length > 0,
-        busy: rendererBackupService.isActive(),
-        signedIn: isSignedIn(session),
-      })
-      if (!run) return
-      busy = true
-      try {
-        await rendererBackupService.exportToServer(
-          { sessions: true, settings: true, copilots: true, credentials: false },
-          { automatic: true, changeAtStart: session.lastChangeAt }
-        )
-      } catch {
-        await noteServerBackupFailure()
-      } finally {
-        busy = false
-      }
-    })()
+  const upload = async () => {
+    const latest = await loadServerBackupSession()
+    const run = shouldAutoBackup({
+      now: Date.now(),
+      dirty: latest.dirty,
+      lastChangeAt: latest.lastChangeAt,
+      lastSuccessAt: latest.lastSuccessAt,
+      dirtySince: latest.dirtySince,
+      nextAttemptAt: latest.nextAttemptAt,
+      suppressUntil,
+      generating: rendererBackupService.getGeneratingSessionIds().length > 0,
+      busy: rendererBackupService.isActive() || busy,
+      signedIn: isSignedIn(latest),
+    })
+    if (!run) return
+    await rendererBackupService.exportToServer(
+      { sessions: true, settings: true, copilots: true, credentials: false },
+      { automatic: true, changeAtStart: latest.lastChangeAt },
+    )
   }
 
-  const unsubscribeGeneration = rendererApplication.generationRuntime.subscribe(() => tick())
-  const timer = setInterval(tick, 15_000)
+  const merge = async () => {
+    if (busy || backupSyncSuppressed()) return
+    const session = await loadServerBackupSession()
+    if (!isSignedIn(session) || rendererBackupService.isActive()) return
+    if (rendererBackupService.getGeneratingSessionIds().length > 0) return
+    busy = true
+    let complete = false
+    try {
+      await rendererBackupService.runLocked(async () => {
+        while (await mergeNextRemoteBackup()) {
+          if (rendererBackupService.getGeneratingSessionIds().length > 0) return
+        }
+        complete = true
+      })
+    } catch {
+      return
+    } finally {
+      busy = false
+    }
+    if (!complete) return
+    try {
+      await upload()
+    } catch {
+      await noteServerBackupFailure()
+    }
+  }
+
+  const uploadOnly = () => {
+    if (busy) return
+    void upload().catch(() => noteServerBackupFailure())
+  }
+
+  const unsubscribeGeneration = rendererApplication.generationRuntime.subscribe(uploadOnly)
+  const uploadTimer = setInterval(uploadOnly, 15_000)
+  const mergeTimer = setInterval(() => void merge(), 60_000)
+  void merge()
   return () => {
     unsubscribeSettings()
     unsubscribeSessions()
     unsubscribeGeneration()
-    clearInterval(timer)
+    clearInterval(uploadTimer)
+    clearInterval(mergeTimer)
   }
 }
